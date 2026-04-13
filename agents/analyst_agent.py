@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -70,10 +71,18 @@ class AnalystRAGAgent:
         adapted = load_analysis_dataset(self.dataset_path)
         self.dataframe = adapted.dataframe
         self.eda_agent = EDAAgent(output_dir=self.dataset_path.parent)
-        self.eda_report = self.eda_agent.analyze_dataset(self.dataset_path, include_charts=False)
+        cache_key = self._dataset_cache_key()
+        self.eda_report = self.eda_agent.analyze_dataset(self.dataset_path, include_charts=False, cache_key=cache_key)
         self.retriever = EcommerceRetriever(self.dataframe)
         self.llm_client = llm_client or LLMClient()
         self.models = models or DEFAULT_MODELS
+
+    def _dataset_cache_key(self) -> str:
+        digest = hashlib.sha256()
+        with self.dataset_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()[:16]
 
     def available_models(self) -> list[str]:
         return self.models

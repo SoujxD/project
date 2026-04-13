@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -56,6 +57,14 @@ def _validate_csv(upload_path: Path) -> pd.DataFrame:
         return pd.read_csv(upload_path)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not parse CSV file: {exc}") from exc
+
+
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:16]
 
 
 @app.get("/health")
@@ -119,9 +128,9 @@ async def analyst_answer(
 async def eda_report(file: UploadFile = File(...)) -> dict:
     upload_path = _save_upload(file)
     _validate_csv(upload_path)
-    report_id = uuid.uuid4().hex[:12]
+    report_id = _file_hash(upload_path)
     eda_agent = EDAAgent(output_dir=OUTPUT_DIR)
-    report = eda_agent.analyze_dataset(upload_path, include_charts=True, chart_prefix=report_id)
+    report = eda_agent.analyze_dataset(upload_path, include_charts=True, chart_prefix=report_id, cache_key=report_id)
     return {
         "dataset_name": file.filename,
         "profile": report["profile"],

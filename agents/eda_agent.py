@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -33,11 +34,13 @@ class EDAAgent:
         self.output_dir = Path(output_dir)
         self.chart_dir = self.output_dir / "charts"
         self.docs_asset_dir = self.output_dir.parent / "docs" / "assets"
+        self.cache_dir = self.output_dir / "eda_cache"
 
     def _ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.chart_dir.mkdir(parents=True, exist_ok=True)
         self.docs_asset_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _normalized(self, name: str) -> str:
         return "".join(ch.lower() for ch in str(name) if ch.isalnum())
@@ -427,12 +430,43 @@ class EDAAgent:
             })
         return manifest
 
+    def _cache_path(self, cache_key: str) -> Path:
+        self._ensure_dirs()
+        return self.cache_dir / f"{cache_key}.json"
+
+    def _load_cached_report(self, cache_key: str) -> dict[str, Any] | None:
+        cache_path = self._cache_path(cache_key)
+        if not cache_path.exists():
+            return None
+        try:
+            cached = json.loads(cache_path.read_text())
+        except Exception:
+            return None
+        for chart in cached.get("chart_manifest", []):
+            filename = chart.get("filename")
+            if not filename or not (self.chart_dir / filename).exists():
+                return None
+            chart["path"] = str(self.chart_dir / filename)
+        return cached
+
+    def _store_cached_report(self, cache_key: str, report: dict[str, Any]) -> None:
+        cache_path = self._cache_path(cache_key)
+        cacheable = json.loads(json.dumps(report, default=str))
+        for chart in cacheable.get("chart_manifest", []):
+            chart["path"] = chart.get("filename", chart.get("path"))
+        cache_path.write_text(json.dumps(cacheable, indent=2))
+
     def analyze_dataset(
         self,
         dataset_path: str | Path,
         include_charts: bool = True,
         chart_prefix: str | None = None,
+        cache_key: str | None = None,
     ) -> dict[str, Any]:
+        if cache_key:
+            cached = self._load_cached_report(cache_key)
+            if cached is not None:
+                return cached
         adapted = load_analysis_dataset(dataset_path)
         raw_dataset = pd.read_csv(dataset_path)
         analysis_dataset = adapted.dataframe
@@ -457,7 +491,7 @@ class EDAAgent:
             "recommended_questions": suggested_questions[:5],
         }
         retrieval_chunks = self._retrieval_chunks(profile, quality_report, suggested_questions, chart_manifest)
-        return {
+        report = {
             "profile": profile,
             "quality_checks": quality_report,
             "chart_manifest": chart_manifest,
@@ -467,3 +501,6 @@ class EDAAgent:
             "key_findings": key_findings,
             "preview": raw_dataset.head(12).fillna("").to_dict(orient="records"),
         }
+        if cache_key:
+            self._store_cached_report(cache_key, report)
+        return report
