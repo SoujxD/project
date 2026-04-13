@@ -1,0 +1,5 @@
+model,keyword_score,recommendation_score,completeness_score,groundedness_score,overall_score
+google/gemma-2-9b-it,0.6416666666666666,1.0,1.0,0.11666666666666665,0.689585
+meta-llama/llama-3.1-8b-instruct,0.6416666666666666,1.0,1.0,0.11666666666666665,0.689585
+mistralai/mistral-7b-instruct,0.6416666666666666,1.0,1.0,0.11666666666666665,0.689585
+qwen/qwen-2.5-7b-instruct,0.6416666666666666,1.0,1.0,0.11666666666666665,0.689585

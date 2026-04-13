@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ISE547 Executive Analytics</title>
+    <style>
+      :root {
+        --bg: #f5fbfc;
+        --card: rgba(255, 255, 255, 0.92);
+        --ink: #143646;
+        --muted: #58717d;
+        --line: rgba(20, 54, 70, 0.1);
+        --primary: #165d7a;
+        --secondary: #4ea5d9;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(78,165,217,0.14), transparent 30%),
+          linear-gradient(180deg, #f8fcfc 0%, #eef6f7 100%);
+      }
+      .wrap {
+        max-width: 1140px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 0 26px;
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .nav a {
+        color: var(--muted);
+        text-decoration: none;
+        margin-left: 18px;
+      }
+      .hero, .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 18px 50px rgba(21, 79, 105, 0.08);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+        padding: 34px;
+        margin-bottom: 22px;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.75rem;
+        color: var(--primary);
+        font-weight: 700;
+      }
+      h1, h2, h3 {
+        margin: 0;
+      }
+      h1 {
+        font-size: 3rem;
+        line-height: 1.02;
+        margin: 10px 0 14px;
+      }
+      p {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 22px;
+      }
+      .card {
+        padding: 22px;
+      }
+      .metric {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--primary);
+        margin-top: 8px;
+      }
+      .label {
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .chip {
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: rgba(22, 93, 122, 0.1);
+        color: var(--primary);
+        font-size: 0.88rem;
+      }
+      .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+      img {
+        width: 100%;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: white;
+      }
+      ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+      .cta {
+        display: inline-block;
+        padding: 12px 18px;
+        border-radius: 999px;
+        background: var(--primary);
+        color: white;
+        text-decoration: none;
+        margin-right: 12px;
+        margin-top: 10px;
+      }
+      .ghost {
+        background: rgba(22, 93, 122, 0.08);
+        color: var(--primary);
+      }
+      @media (max-width: 900px) {
+        .hero, .grid, .two-col, .chart-grid {
+          grid-template-columns: 1fr;
+        }
+        h1 { font-size: 2.3rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="nav">
+        <div class="brand">ISE547 Executive Analytics</div>
+        <div>
+          <a href="#overview">Overview</a>
+          <a href="#insights">Insights</a>
+          <a href="#agents">Agents</a>
+          <a href="#evaluation">Evaluation</a>
+          <a href="#presentation">Presentation</a>
+        </div>
+      </div>
+
+      <section class="hero" id="overview">
+        <div>
+          <div class="eyebrow">Public Project Site</div>
+          <h1>Customer behavior insights and presentation-ready analytics.</h1>
+          <p>
+            This project combines a data analyst RAG agent, a structured evaluation pipeline,
+            and a presentation generator to help analysts move from business questions to
+            stakeholder-ready outputs. This page is the static GitHub Pages showcase; the full
+            interactive workflow lives in the Streamlit app.
+          </p>
+          <a class="cta" href="../README.md">Read project guide</a>
+          <a class="cta ghost" href="../docs/assets/presentation.pptx">Download latest PPT</a>
+        </div>
+        <div class="card">
+          <h3>What this site is for</h3>
+          <ul>
+            <li>Show the project publicly via GitHub Pages.</li>
+            <li>Highlight dataset-driven findings and charts.</li>
+            <li>Explain the AI agents, models, and evaluation approach.</li>
+            <li>Preview the same story the downloadable PowerPoint tells.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="label">Focus</div>
+          <div class="metric">E-commerce</div>
+          <p>Business analytics over online shopper behavior.</p>
+        </div>
+        <div class="card">
+          <div class="label">Analyst Flow</div>
+          <div class="metric">Q&A</div>
+          <p>Ask questions, review insights, then export a deck.</p>
+        </div>
+        <div class="card">
+          <div class="label">Evaluation</div>
+          <div class="metric">4 x 4</div>
+          <p>Four models and four prompts compared systematically.</p>
+        </div>
+        <div class="card">
+          <div class="label">Deliverable</div>
+          <div class="metric">PPT</div>
+          <p>Dataset-focused presentation with charts and recommendations.</p>
+        </div>
+      </section>
+
+      <section class="two-col" id="insights">
+        <div class="card">
+          <h2>Business insight narrative</h2>
+          <ul>
+            <li>Conversion rises when visitors show stronger intent through deeper product engagement.</li>
+            <li>Returning visitors and efficient traffic sources are the most attractive target customers.</li>
+            <li>Higher page value is a strong indicator of purchase readiness.</li>
+            <li>Lower bounce and exit rates align with better commercial outcomes.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>Sample analyst questions</h2>
+          <ul>
+            <li>Which visitor segments and traffic sources should we prioritize?</li>
+            <li>What patterns distinguish converting sessions from non-converting sessions?</li>
+            <li>How does bounce rate affect conversion performance?</li>
+            <li>Which month appears strongest for revenue-oriented campaigns?</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="chart-grid">
+        <div class="card">
+          <h3>Conversion by month</h3>
+          <img src="../docs/assets/month_conversion.png" alt="Conversion by month chart" />
+        </div>
+        <div class="card">
+          <h3>Conversion by visitor type</h3>
+          <img src="../docs/assets/visitor_conversion.png" alt="Conversion by visitor type chart" />
+        </div>
+        <div class="card">
+          <h3>Conversion by traffic source</h3>
+          <img src="../docs/assets/traffic_conversion.png" alt="Conversion by traffic source chart" />
+        </div>
+        <div class="card">
+          <h3>Conversion by page value bucket</h3>
+          <img src="../docs/assets/page_value_conversion.png" alt="Conversion by page value bucket chart" />
+        </div>
+      </section>
+
+      <section class="two-col" id="agents">
+        <div class="card">
+          <h2>AI agents</h2>
+          <ul>
+            <li>Data Analyst Agent: answers business questions with retrieved dataset evidence.</li>
+            <li>Presentation Agent: transforms insights into structured slides and exportable visuals.</li>
+          </ul>
+          <div class="chips">
+            <span class="chip">meta-llama/llama-3.1-8b-instruct</span>
+            <span class="chip">mistralai/mistral-7b-instruct</span>
+            <span class="chip">google/gemma-2-9b-it</span>
+            <span class="chip">qwen/qwen-2.5-7b-instruct</span>
+          </div>
+        </div>
+        <div class="card" id="evaluation">
+          <h2>Evaluation metrics</h2>
+          <ul>
+            <li><strong>keyword_score</strong>: how much expected business language appears in the answer.</li>
+            <li><strong>recommendation_score</strong>: how actionable and complete the recommendations are.</li>
+            <li><strong>completeness_score</strong>: whether the structured output fields are fully returned.</li>
+            <li><strong>groundedness_score</strong>: how strongly the answer reflects retrieved dataset evidence.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card" id="presentation">
+        <h2>Presentation preview and download</h2>
+        <p>
+          The final PowerPoint focuses only on the dataset, customer insights, behavior patterns,
+          target customers, and recommendations. It intentionally excludes model-comparison content
+          so it stays stakeholder-friendly and business-focused.
+        </p>
+        <a class="cta" href="../docs/assets/presentation.pptx">Download presentation</a>
+      </section>
+    </div>
+  </body>
+</html>

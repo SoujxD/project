@@ -1,0 +1,3 @@
+rag_enabled,keyword_score,recommendation_score,completeness_score,groundedness_score,overall_score
+True,0.6416666666666666,1.0,1.0,0.2333333333333333,0.71875
+False,0.6416666666666666,1.0,1.0,0.0,0.66042

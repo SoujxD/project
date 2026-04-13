@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+outputs/*.csv
+outputs/*.pptx
+outputs/charts/*.png
+outputs/uploads/
+outputs/api_uploads/
+outputs/api_presentations/
