@@ -31,6 +31,7 @@ class EDAAgent:
     """Profiles datasets, runs quality checks, generates charts, and prepares analyst handoff context."""
 
     CACHE_VERSION = "light-eda-v2"
+    CHART_DPI = 140
 
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
@@ -330,7 +331,7 @@ class EDAAgent:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         fig.tight_layout()
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
     def _plot_hist(self, series: pd.Series, title: str, path: Path) -> None:
@@ -342,7 +343,7 @@ class EDAAgent:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         fig.tight_layout()
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
     def _plot_heatmap(self, corr: pd.DataFrame, title: str, path: Path) -> None:
@@ -359,7 +360,7 @@ class EDAAgent:
                 ax.text(col, row, f"{value:.2f}", ha="center", va="center", fontsize=7.5, color="#153847")
         fig.colorbar(img, ax=ax, fraction=0.04, pad=0.03)
         fig.tight_layout()
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
     def _plot_area(self, series: pd.Series, title: str, path: Path, ylabel: str = "Value") -> None:
@@ -379,7 +380,7 @@ class EDAAgent:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         fig.tight_layout()
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
     def _plot_doughnut(self, series: pd.Series, title: str, path: Path) -> None:
@@ -404,7 +405,7 @@ class EDAAgent:
         )
         ax.set_title(title, fontsize=13)
         fig.tight_layout()
-        fig.savefig(path, dpi=180, bbox_inches="tight")
+        fig.savefig(path, dpi=self.CHART_DPI, bbox_inches="tight")
         plt.close(fig)
 
     def _plot_scatter(self, dataset: pd.DataFrame, x_col: str, y_col: str, title: str, path: Path) -> None:
@@ -422,7 +423,7 @@ class EDAAgent:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         fig.tight_layout()
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
     def _chart_manifest(
