@@ -30,6 +30,12 @@ SAMPLE_QUESTIONS = [
     "What recommendations would improve performance based on this data?",
 ]
 
+SCORE_COLORS = {
+    "high": "#1d7a61",
+    "mid": "#b07d2e",
+    "low": "#a03030",
+}
+
 
 # -----------------------------
 # Page Styling
@@ -69,23 +75,17 @@ def inject_styles() -> None:
             border-right: 1px solid var(--border);
         }
 
-        [data-testid="stSidebarNav"] {
-            display: none;
-        }
+        [data-testid="stSidebarNav"] { display: none; }
 
-        .app-shell {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
+        /* ── Topbar ── */
         .topbar {
-            background: rgba(255,255,255,0.78);
-            backdrop-filter: blur(8px);
+            background: rgba(255,255,255,0.82);
+            backdrop-filter: blur(10px);
             border: 1px solid var(--border);
-            border-radius: 24px;
+            border-radius: 22px;
             box-shadow: var(--shadow);
-            padding: 1.25rem 1.35rem;
+            padding: 1.35rem 1.5rem;
+            margin-bottom: 0.75rem;
         }
 
         .topbar-grid {
@@ -97,155 +97,210 @@ def inject_styles() -> None:
         }
 
         .eyebrow {
-            font-size: 0.72rem;
-            letter-spacing: 0.14em;
+            font-size: 0.7rem;
+            letter-spacing: 0.15em;
             font-weight: 700;
             text-transform: uppercase;
             color: #4c8598;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .eyebrow::before {
+            content: "";
+            display: inline-block;
+            width: 16px;
+            height: 2px;
+            background: #4c8598;
+            border-radius: 2px;
         }
 
         .hero-title {
-            font-size: 2.05rem;
+            font-size: 1.9rem;
             line-height: 1.06;
             font-weight: 750;
-            color: #173746;
+            background: linear-gradient(135deg, #163747, #1d7a9a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-top: 0.3rem;
             max-width: 780px;
         }
 
         .hero-subtitle {
-            margin-top: 0.55rem;
+            margin-top: 0.5rem;
             color: var(--muted);
             max-width: 780px;
-            line-height: 1.5;
+            line-height: 1.55;
+            font-size: 0.93rem;
         }
 
         .pill-row {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.45rem;
             flex-wrap: wrap;
             align-items: center;
+            margin-top: 0.25rem;
         }
 
         .pill {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
+            gap: 0.3rem;
             background: var(--accent-soft);
             color: var(--accent);
-            border: 1px solid rgba(29, 102, 125, 0.08);
-            padding: 0.45rem 0.78rem;
+            border: 1px solid rgba(29, 102, 125, 0.1);
+            padding: 0.42rem 0.75rem;
             border-radius: 999px;
-            font-size: 0.86rem;
+            font-size: 0.82rem;
             font-weight: 600;
             white-space: nowrap;
         }
 
-        .upload-card {
-            background: rgba(255,255,255,0.88);
-            border: 1px solid var(--border);
-            border-radius: 22px;
-            box-shadow: var(--shadow);
-            padding: 1.1rem 1.15rem;
-            margin-top: 1rem;
-            margin-bottom: 1rem;
+        .pill.active {
+            background: var(--accent);
+            color: white;
+            border-color: transparent;
         }
 
+        /* ── Dataset status bar ── */
+        .dataset-bar {
+            background: rgba(255,255,255,0.75);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 0.75rem 1.1rem;
+            margin-bottom: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .dataset-bar-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        /* ── Section headers ── */
         .section-head {
             margin-top: 0.2rem;
-            margin-bottom: 0.85rem;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            border-left: 3px solid var(--accent);
         }
 
         .section-title {
-            font-size: 1.15rem;
+            font-size: 1.12rem;
             font-weight: 750;
             color: #173746;
-            margin-bottom: 0.22rem;
+            margin-bottom: 0.2rem;
         }
 
         .section-subtitle {
             color: var(--muted);
             line-height: 1.5;
+            font-size: 0.9rem;
         }
 
+        /* ── Cards ── */
         .card, .metric-card, .info-card, .preview-card, .hero-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 22px;
+            border-radius: 20px;
             box-shadow: var(--shadow);
         }
 
-        .card, .info-card, .preview-card {
-            padding: 1.1rem 1.15rem;
-        }
+        .card, .info-card, .preview-card { padding: 1.1rem 1.15rem; }
 
         .hero-card {
             background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,247,250,0.95));
-            padding: 1.25rem 1.25rem;
+            padding: 1.2rem 1.25rem;
         }
 
         .metric-card {
-            padding: 1rem 1.05rem;
+            padding: 1rem 1.1rem;
             height: 100%;
+            border-top: 3px solid var(--accent);
         }
 
         .metric-label {
             color: #6d8895;
-            font-size: 0.74rem;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.09em;
             text-transform: uppercase;
         }
 
         .metric-value {
-            margin-top: 0.22rem;
+            margin-top: 0.2rem;
             color: var(--accent);
-            font-size: 1.65rem;
+            font-size: 1.6rem;
             line-height: 1.1;
             font-weight: 760;
         }
 
         .metric-caption {
-            margin-top: 0.28rem;
+            margin-top: 0.25rem;
             color: var(--muted);
-            font-size: 0.92rem;
+            font-size: 0.88rem;
+        }
+
+        /* ── Score badge ── */
+        .score-badge {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .score-high { background: rgba(29, 122, 97, 0.12); color: #1d7a61; }
+        .score-mid  { background: rgba(176, 125, 46, 0.12); color: #b07d2e; }
+        .score-low  { background: rgba(160, 48, 48, 0.12);  color: #a03030; }
+
+        /* ── Info card ── */
+        .info-card {
+            background: rgba(241, 248, 251, 0.9);
+            border-left: 3px solid rgba(29, 102, 125, 0.22);
         }
 
         .label-text {
             color: #69818c;
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             font-weight: 700;
             letter-spacing: 0.06em;
             text-transform: uppercase;
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.22rem;
         }
 
-        .muted {
-            color: var(--muted);
-        }
+        .muted { color: var(--muted); }
 
-        .list-tight ul {
-            margin-top: 0.35rem;
-            margin-bottom: 0rem;
-            padding-left: 1.15rem;
-        }
+        .list-tight ul { margin-top: 0.35rem; margin-bottom: 0; padding-left: 1.15rem; }
+        .list-tight li { margin-bottom: 0.38rem; }
 
-        .list-tight li {
-            margin-bottom: 0.38rem;
-        }
+        .divider-space { height: 0.5rem; }
 
-        .divider-space {
-            height: 0.35rem;
-        }
-
+        /* ── Buttons ── */
         .stButton > button,
         .stDownloadButton > button {
             border-radius: 999px;
-            border: 1px solid rgba(29, 102, 125, 0.12);
-            padding: 0.6rem 1rem;
+            border: 1px solid rgba(29, 102, 125, 0.14);
+            padding: 0.62rem 1.1rem;
             font-weight: 600;
+            transition: all 0.18s;
         }
 
+        .stButton > button[kind="primary"],
+        .stDownloadButton > button {
+            background: var(--accent) !important;
+            color: white !important;
+        }
+
+        /* ── Inputs ── */
         .stTextArea textarea,
         .stTextInput input,
         .stNumberInput input,
@@ -253,55 +308,98 @@ def inject_styles() -> None:
             border-radius: 14px !important;
         }
 
+        /* ── Tabs ── */
         .stTabs [data-baseweb="tab-list"] {
-            gap: 0.55rem;
+            gap: 0.45rem;
+            background: transparent;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0;
         }
 
         .stTabs [data-baseweb="tab"] {
-            background: rgba(255,255,255,0.75);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 0.58rem 0.95rem;
-            color: #395564;
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            padding: 0.55rem 1.05rem;
+            color: var(--muted);
             height: auto;
+            font-weight: 600;
+            font-size: 0.88rem;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .stTabs [data-baseweb="tab"]:hover {
+            background: rgba(29, 102, 125, 0.06);
+            color: var(--accent);
         }
 
         .stTabs [aria-selected="true"] {
-            background: var(--accent-soft) !important;
-            color: #184f62 !important;
+            background: rgba(255,255,255,0.9) !important;
+            color: var(--accent) !important;
+            border-color: var(--border) !important;
         }
 
-        .stAlert {
-            border-radius: 16px;
+        /* ── Expander ── */
+        .stExpander {
+            border: 1px solid var(--border) !important;
+            border-radius: 16px !important;
         }
 
-        .small-caption {
-            color: var(--muted);
-            font-size: 0.88rem;
-        }
+        /* ── Alerts ── */
+        .stAlert { border-radius: 14px; }
 
-        .nav-note {
-            margin-top: 0.6rem;
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
+        /* ── Misc ── */
+        .small-caption { color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+        .nav-note { margin-top: 0.5rem; color: var(--muted); font-size: 0.88rem; }
 
         .slide-title {
             font-size: 1.05rem;
             font-weight: 730;
             color: #173746;
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.22rem;
         }
 
         .notes-box {
             margin-top: 0.55rem;
-            padding: 0.8rem 0.9rem;
-            border-radius: 16px;
+            padding: 0.85rem 0.95rem;
+            border-radius: 14px;
             background: rgba(245, 249, 252, 0.95);
-            border: 1px solid rgba(29, 102, 125, 0.08);
+            border: 1px solid rgba(29, 102, 125, 0.09);
             color: #526a76;
-            font-size: 0.93rem;
-            line-height: 1.45;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .slide-number {
+            display: inline-block;
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        /* ── Sidebar ── */
+        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+            color: var(--accent);
+        }
+
+        .sidebar-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.88rem;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-stat span:last-child {
+            font-weight: 700;
+            color: var(--accent);
         }
         </style>
         """,
@@ -386,50 +484,39 @@ def get_active_dataset() -> tuple[pd.DataFrame, str, str, AnalystRAGAgent]:
 # -----------------------------
 # UI Helpers
 # -----------------------------
-def render_topbar(dataset_name: str) -> None:
+def render_topbar(dataset_name: str, dataset: pd.DataFrame) -> None:
+    is_custom = dataset_name != DEFAULT_DATASET_PATH.name
+    dataset_pill = (
+        f'<span class="pill active">{dataset_name}</span>'
+        if is_custom
+        else f'<span class="pill">{dataset_name}</span>'
+    )
     st.markdown(
         f"""
         <div class="topbar">
             <div class="topbar-grid">
                 <div>
                     <div class="eyebrow">Ecommerce Multi-Agent Analytics</div>
-                    <div class="hero-title">
-                        A cleaner multi-page analytics workflow in Streamlit form.
-                    </div>
+                    <div class="hero-title">Analytics workflow: upload, query, evaluate, present.</div>
                     <div class="hero-subtitle">
-                        Upload an ecommerce CSV, inspect derived insights, review benchmark evaluation results,
-                        and generate a presentation from the same active dataset without leaving the app.
+                        Upload an ecommerce CSV, ask questions through the analyst agent, run benchmark
+                        evaluations, and generate a stakeholder-ready presentation — all from one dataset.
                     </div>
                 </div>
-                <div class="pill-row">
-                    <span class="pill">Overview</span>
-                    <span class="pill">Analyst Demo</span>
-                    <span class="pill">Evaluation</span>
-                    <span class="pill">Presentation</span>
-                    <span class="pill">{dataset_name}</span>
+                <div>
+                    <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:0.45rem;">Active dataset</div>
+                    <div class="pill-row">
+                        {dataset_pill}
+                        <span class="pill">{len(dataset):,} rows</span>
+                        <span class="pill">{len(dataset.columns)} cols</span>
+                    </div>
+                    <div class="pill-row" style="margin-top:0.4rem;">
+                        <span class="pill">Overview</span>
+                        <span class="pill">Analyst</span>
+                        <span class="pill">Evaluation</span>
+                        <span class="pill">Presentation</span>
+                    </div>
                 </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_upload_card(dataset: pd.DataFrame, dataset_name: str, presenter: PresentationGeneratorAgent) -> None:
-    schema = presenter.infer_schema(dataset)
-    st.markdown(
-        f"""
-        <div class="upload-card">
-            <div class="section-title">Active dataset</div>
-            <div class="section-subtitle">
-                Upload a customer, session, or ecommerce performance CSV from the sidebar. The same dataset is reused
-                across overview, analyst, and presentation workflows.
-            </div>
-            <div class="pill-row">
-                <span class="pill">Dataset: {dataset_name}</span>
-                <span class="pill">Rows: {len(dataset)}</span>
-                <span class="pill">Columns: {len(dataset.columns)}</span>
-                <span class="pill">Outcome: {schema['target'] or 'Not detected'}</span>
             </div>
         </div>
         """,
@@ -462,16 +549,12 @@ def metric_card(label: str, value: str, caption: str) -> None:
     )
 
 
-def info_card(title: str, body_md: str) -> None:
-    st.markdown(
-        f"""
-        <div class="info-card">
-            <div class="section-title" style="font-size:1rem;">{title}</div>
-            <div class="muted list-tight">{body_md}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def score_class(val: float) -> str:
+    if val >= 0.75:
+        return "score-high"
+    if val >= 0.5:
+        return "score-mid"
+    return "score-low"
 
 
 def executive_response_text(parsed: dict[str, Any]) -> str:
@@ -493,42 +576,45 @@ def executive_response_text(parsed: dict[str, Any]) -> str:
 # -----------------------------
 def plot_bar(series: pd.Series, title: str, horizontal: bool = False) -> None:
     fig, ax = plt.subplots(figsize=(7.4, 4.1))
+    color = "#1d667d"
     if horizontal:
-        series.sort_values().plot(kind="barh", ax=ax)
+        series.sort_values().plot(kind="barh", ax=ax, color=color)
         ax.set_ylabel("")
     else:
-        series.plot(kind="bar", ax=ax)
+        series.plot(kind="bar", ax=ax, color=color)
         ax.set_xlabel("")
-    ax.set_title(title)
-    ax.grid(alpha=0.15, axis="x" if horizontal else "y")
+    ax.set_title(title, fontsize=12, pad=10, color="#163747")
+    ax.grid(alpha=0.12, axis="x" if horizontal else "y")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.patch.set_facecolor("#f7fafc")
+    ax.set_facecolor("#f7fafc")
     fig.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
 
 def plot_heatmap(df: pd.DataFrame, title: str) -> None:
     fig, ax = plt.subplots(figsize=(7.3, 4.2))
-    image = ax.imshow(df.values, cmap="GnBu", aspect="auto")
-    ax.set_title(title)
+    image = ax.imshow(df.values, cmap="GnBu", aspect="auto", vmin=0, vmax=1)
+    ax.set_title(title, fontsize=12, pad=10, color="#163747")
     ax.set_xticks(range(len(df.columns)))
-    ax.set_xticklabels(df.columns, rotation=25, ha="right")
+    ax.set_xticklabels(df.columns, rotation=25, ha="right", fontsize=9)
     ax.set_yticks(range(len(df.index)))
-    ax.set_yticklabels(df.index)
+    ax.set_yticklabels(df.index, fontsize=9)
 
     for row in range(df.shape[0]):
         for col in range(df.shape[1]):
-            ax.text(
-                col,
-                row,
-                f"{df.iloc[row, col]:.2f}",
-                ha="center",
-                va="center",
-                fontsize=9,
-                color="#153847",
-            )
+            val = df.iloc[row, col]
+            text_color = "white" if val > 0.65 else "#153847"
+            ax.text(col, row, f"{val:.2f}", ha="center", va="center", fontsize=9, color=text_color)
 
     fig.colorbar(image, ax=ax, fraction=0.045, pad=0.04)
+    fig.patch.set_facecolor("#f7fafc")
+    ax.set_facecolor("#f7fafc")
     fig.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
 
 # -----------------------------
@@ -539,7 +625,7 @@ def infer_overview_metrics(dataset: pd.DataFrame, presenter: PresentationGenerat
     rate = f"{summary['target_rate']:.1%}" if summary["target_rate"] is not None else "N/A"
 
     return {
-        "rows": str(summary["rows"]),
+        "rows": f"{summary['rows']:,}",
         "columns": str(summary["columns"]),
         "outcome": rate,
         "top_segment": str(summary["top_customer"]),
@@ -555,30 +641,35 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
 
     section_header(
         "Dataset Overview",
-        "This page mirrors the public overview page and keeps the rest of the workflow grounded in the same active dataset.",
+        "A high-level summary of the active dataset — the same data drives the analyst, evaluation, and presentation tabs.",
     )
 
     metric_cols = st.columns(4)
     with metric_cols[0]:
-        metric_card("Rows", metrics["rows"], "Total records in the dataset")
+        metric_card("Rows", metrics["rows"], "Total records")
     with metric_cols[1]:
-        metric_card("Columns", metrics["columns"], "Available fields for analysis")
+        metric_card("Columns", metrics["columns"], "Available fields")
     with metric_cols[2]:
-        metric_card("Outcome Rate", metrics["outcome"], "Detected conversion or purchase rate")
+        metric_card("Outcome Rate", metrics["outcome"], "Detected conversion rate")
     with metric_cols[3]:
-        metric_card("Top Segment", metrics["top_segment"], "Best-performing customer grouping")
+        metric_card("Top Segment", metrics["top_segment"], "Best-performing group")
 
     st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
 
     left, right = st.columns([1.15, 1])
     with left:
         st.markdown('<div class="hero-card">', unsafe_allow_html=True)
-        st.markdown("#### Current dataset context")
-        st.markdown(f"**Active dataset:** `{dataset_name}`")
-        st.markdown(f"**Detected outcome column:** `{schema['target'] or 'not clearly detected'}`")
-        st.markdown(f"**Detected customer grouping:** `{schema['customer'] or 'not clearly detected'}`")
-        st.markdown(f"**Detected channel grouping:** `{schema['channel'] or 'not clearly detected'}`")
-        st.markdown(f"**Detected time grouping:** `{schema['time'] or 'not clearly detected'}`")
+        st.markdown("#### Detected schema")
+
+        def schema_row(label: str, value: str | None) -> None:
+            display = f"`{value}`" if value else "_not detected_"
+            st.markdown(f"**{label}:** {display}")
+
+        schema_row("Dataset", dataset_name)
+        schema_row("Outcome column", schema["target"])
+        schema_row("Customer grouping", schema["customer"])
+        schema_row("Channel grouping", schema["channel"])
+        schema_row("Time grouping", schema["time"])
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
@@ -586,17 +677,23 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
         st.markdown("#### Workflow")
         st.markdown(
             """
-            - Upload one CSV in the sidebar  
-            - Explore it through the analyst agent  
-            - Review benchmark evaluation outputs  
-            - Generate a polished presentation from the same data  
+            1. Upload a CSV in the sidebar (or use the bundled dataset)
+            2. Run analyst questions in the **Analyst** tab
+            3. Benchmark models & prompts in the **Evaluation** tab
+            4. Export a polished deck from the **Presentation** tab
             """
+        )
+        st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="small-caption">Top channel: <strong>{metrics["top_channel"]}</strong> &nbsp;·&nbsp; '
+            f'Top period: <strong>{metrics["top_time"]}</strong></div>',
+            unsafe_allow_html=True,
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
     st.markdown("#### Data preview")
-    st.dataframe(dataset.head(20), use_container_width=True)
+    st.dataframe(dataset.head(20), use_container_width=True, hide_index=False)
 
 
 # -----------------------------
@@ -604,39 +701,40 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
 # -----------------------------
 def render_analyst_demo(agent: AnalystRAGAgent) -> None:
     section_header(
-        "Analyst Agent Demo",
-        "This page mirrors the public analyst page, but here the answer is produced by the Python analyst agent rather than browser-only heuristics.",
+        "Analyst Agent",
+        "Ask a business question and receive a structured, evidence-backed answer from the active dataset.",
     )
 
-    controls = st.columns([1, 1, 1, 1.15])
-    with controls[0]:
+    ctrl_cols = st.columns([1, 1, 1, 1.15])
+    with ctrl_cols[0]:
         model = st.selectbox("Model", agent.available_models(), key="demo_model")
-    with controls[1]:
+    with ctrl_cols[1]:
         prompt_style = st.selectbox("Prompt style", agent.available_prompt_styles(), key="demo_prompt")
-    with controls[2]:
+    with ctrl_cols[2]:
         top_k = st.slider("Retrieved rows", min_value=1, max_value=8, value=5)
-    with controls[3]:
+    with ctrl_cols[3]:
         rag_enabled = st.toggle("Use retrieved context", value=True, key="demo_rag")
 
-    st.markdown("##### Sample business prompts")
+    st.markdown("##### Try a sample question")
     sample_cols = st.columns(len(SAMPLE_QUESTIONS))
     for idx, sample in enumerate(SAMPLE_QUESTIONS):
         if sample_cols[idx].button(f"Sample {idx + 1}", key=f"sample_q_{idx}", use_container_width=True):
             st.session_state["question_text"] = sample
+            rerun_app()
 
-    st.text_area("Business question", key="question_text", height=120)
+    st.text_area("Business question", key="question_text", height=110, placeholder="e.g. Which visitor segments convert best and why?")
 
     run_col, note_col = st.columns([0.28, 0.72])
     with run_col:
         run_clicked = st.button("Run analyst agent", type="primary", use_container_width=True)
     with note_col:
         st.markdown(
-            '<div class="small-caption">The answer is generated against the currently active dataset in the sidebar.</div>',
+            '<div class="small-caption" style="margin-top:0.6rem;">Runs against the active dataset shown in the sidebar.</div>',
             unsafe_allow_html=True,
         )
 
     if run_clicked:
-        with st.spinner("Generating answer from the active dataset..."):
+        with st.spinner("Generating answer from the active dataset…"):
             result = agent.answer_question(
                 question=st.session_state["question_text"],
                 model=model,
@@ -648,25 +746,38 @@ def render_analyst_demo(agent: AnalystRAGAgent) -> None:
 
     result = st.session_state.get("analyst_result")
     if not result:
-        st.info("Run a sample question or write your own to preview the analyst output.")
+        st.info("Select a sample question above or write your own, then click **Run analyst agent**.")
         return
 
+    st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
+
     response_col, json_col = st.columns([1.1, 0.9])
+    parsed = result.parsed_response
+
     with response_col:
         st.markdown("#### Executive briefing")
+        conf = parsed.get("confidence", "low")
+        conf_class = "score-high" if conf == "high" else ("score-mid" if conf == "medium" else "score-low")
+        st.markdown(
+            f'Confidence: <span class="score-badge {conf_class}">{conf.title()}</span>',
+            unsafe_allow_html=True,
+        )
         st.text_area(
             "Structured response",
-            value=executive_response_text(result.parsed_response),
-            height=330,
+            value=executive_response_text(parsed),
+            height=310,
             label_visibility="collapsed",
         )
 
     with json_col:
         st.markdown("#### Parsed JSON")
-        st.json(result.parsed_response)
+        st.json(parsed, expanded=True)
 
-    st.markdown("#### Retrieved evidence")
-    st.text(result.retrieved_context or "RAG was disabled for this run.")
+    with st.expander("Retrieved dataset evidence", expanded=False):
+        if result.retrieved_context:
+            st.text(result.retrieved_context)
+        else:
+            st.caption("RAG was disabled for this run.")
 
 
 # -----------------------------
@@ -675,7 +786,7 @@ def render_analyst_demo(agent: AnalystRAGAgent) -> None:
 def render_evaluation_dashboard() -> None:
     section_header(
         "Evaluation Dashboard",
-        "This page mirrors the public evaluation page while keeping the benchmark tied to the bundled academic dataset for consistent grading and comparison.",
+        "Benchmark all model and prompt combinations on the bundled academic dataset for consistent, reproducible comparisons.",
     )
 
     results_df = load_results()
@@ -686,29 +797,29 @@ def render_evaluation_dashboard() -> None:
         output_dir=OUTPUT_DIR,
     )
 
-    top_controls = st.columns([0.9, 2.1, 1.05])
-    with top_controls[0]:
-        limit = st.number_input("Benchmark size", min_value=10, max_value=100, value=20, step=10)
-    with top_controls[1]:
+    ctrl_cols = st.columns([0.7, 2.3, 1.1])
+    with ctrl_cols[0]:
+        limit = st.number_input("Questions", min_value=10, max_value=100, value=20, step=10)
+    with ctrl_cols[1]:
         st.markdown(
             """
             <div class="info-card">
-                <div class="section-title" style="font-size:1rem;">Benchmark note</div>
-                <div class="muted">
-                    This panel uses the bundled benchmark dataset and question set for consistent grading and comparison.
-                    The upload-driven analyst and presentation tabs remain flexible, while evaluation stays fixed.
+                <div style="font-size:0.78rem;font-weight:700;color:#4c8598;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:4px;">Benchmark note</div>
+                <div class="muted" style="font-size:0.88rem;">
+                    Evaluation always runs on the bundled dataset and question set for reproducibility.
+                    The analyst and presentation tabs remain flexible for uploaded data.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    with top_controls[2]:
-        run_eval = st.button("Run benchmark evaluation", type="primary", use_container_width=True)
+    with ctrl_cols[2]:
+        run_eval = st.button("Run benchmark", type="primary", use_container_width=True)
 
     if run_eval:
-        with st.spinner("Running benchmark evaluation across models, prompts, and RAG settings..."):
+        with st.spinner("Running evaluation across all models, prompts, and RAG settings…"):
             results_df = pipeline.run(limit=int(limit))
-        st.success(f"Saved {len(results_df)} benchmark rows.")
+        st.success(f"Evaluation complete — {len(results_df)} rows saved.")
 
     if results_df is None:
         st.info("Run the benchmark once to populate this dashboard.")
@@ -725,46 +836,51 @@ def render_evaluation_dashboard() -> None:
 
     metric_cols = st.columns(4)
     with metric_cols[0]:
-        metric_card("Runs", str(len(results_df)), "Question-model-prompt-RAG combinations")
+        metric_card("Benchmark Rows", str(len(results_df)), "Question-model-prompt-RAG combos")
     with metric_cols[1]:
-        metric_card("Best Model", str(model_table.index[0]), "Highest average overall score")
+        metric_card("Best Model", str(model_table.index[0]), "Highest avg overall score")
     with metric_cols[2]:
-        metric_card("Best Prompt", str(prompt_table.index[0]), "Highest average overall score")
+        metric_card("Best Prompt", str(prompt_table.index[0]), "Highest avg overall score")
     with metric_cols[3]:
-        metric_card("RAG Lift", rag_lift, "Average change in overall score")
+        metric_card("RAG Lift", rag_lift, "Score delta: RAG on vs off")
+
+    st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
 
     explain_left, explain_right = st.columns(2)
     with explain_left:
         st.markdown('<div class="info-card">', unsafe_allow_html=True)
-        st.markdown("#### What the scores represent")
+        st.markdown("#### Score definitions")
         st.markdown(
             """
-            - `keyword_score`: expected business keyword coverage  
-            - `recommendation_score`: presence and usefulness of recommendations  
-            - `completeness_score`: completeness of the JSON structure  
-            - `groundedness_score`: overlap with retrieved evidence  
-            - `overall_score`: simple average of the four metrics  
+            - `keyword_score` — expected business keyword coverage
+            - `recommendation_score` — presence and usefulness of recommendations
+            - `completeness_score` — completeness of the JSON structure
+            - `groundedness_score` — overlap with retrieved evidence
+            - `overall_score` — simple average of the four metrics
             """
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
     with explain_right:
         st.markdown('<div class="info-card">', unsafe_allow_html=True)
-        st.markdown("#### How to read the visuals")
+        st.markdown("#### Reading the visuals")
         st.markdown(
             """
-            - Bar charts rank models and prompt styles by overall score  
-            - Heatmaps show score composition instead of only the average  
-            - Tables help document evaluation rigor in the report  
+            - Horizontal bars rank models and prompt styles by overall score
+            - Heatmaps show per-metric composition, not just the average
+            - Color intensity: darker = higher score (0 → 1 scale)
+            - Raw rows are available in the expandable table below
             """
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
 
     viz_cols = st.columns(2)
     with viz_cols[0]:
         plot_bar(model_table["overall_score"], "Overall score by model", horizontal=True)
     with viz_cols[1]:
-        plot_bar(prompt_table["overall_score"], "Overall score by prompt", horizontal=True)
+        plot_bar(prompt_table["overall_score"], "Overall score by prompt style", horizontal=True)
 
     heat_cols = st.columns(2)
     with heat_cols[0]:
@@ -775,30 +891,23 @@ def render_evaluation_dashboard() -> None:
     with heat_cols[1]:
         plot_heatmap(
             prompt_table[["keyword_score", "recommendation_score", "completeness_score", "groundedness_score"]],
-            "Metric mix by prompt",
+            "Metric mix by prompt style",
         )
 
     with st.expander("Aggregated benchmark tables", expanded=False):
         st.markdown("**By model**")
         st.dataframe(model_table, use_container_width=True)
-        st.markdown("**By prompt**")
+        st.markdown("**By prompt style**")
         st.dataframe(prompt_table, use_container_width=True)
         st.markdown("**RAG vs no-RAG**")
         st.dataframe(rag_table, use_container_width=True)
 
     display_columns = [
-        "question_id",
-        "category",
-        "model",
-        "prompt_style",
-        "rag_enabled",
-        "keyword_score",
-        "recommendation_score",
-        "completeness_score",
-        "groundedness_score",
-        "overall_score",
-        "summary",
+        "question_id", "category", "model", "prompt_style", "rag_enabled",
+        "keyword_score", "recommendation_score", "completeness_score",
+        "groundedness_score", "overall_score", "summary",
     ]
+    st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
     st.markdown("#### Sample benchmark rows")
     st.dataframe(results_df[display_columns].head(40), use_container_width=True)
 
@@ -809,21 +918,24 @@ def render_evaluation_dashboard() -> None:
 def render_presentation_generator(dataset_path: str) -> None:
     section_header(
         "Presentation Generator",
-        "This page mirrors the public presentation page while generating the full PowerPoint directly from the active dataset.",
+        "Generate a stakeholder-ready PowerPoint directly from the active dataset — charts included.",
     )
     presenter = build_presenter()
 
-    action_left, action_right = st.columns([0.3, 0.7])
+    action_left, action_right = st.columns([0.32, 0.68])
     with action_left:
         generate_clicked = st.button("Generate presentation", type="primary", use_container_width=True)
     with action_right:
         st.markdown(
-            '<div class="small-caption">The slide deck is created from the same active dataset used in the overview and analyst tabs.</div>',
+            '<div class="small-caption" style="margin-top:0.65rem;">'
+            'Creates charts and builds the deck from the active dataset. '
+            'Previous outputs are overwritten.'
+            '</div>',
             unsafe_allow_html=True,
         )
 
     if generate_clicked:
-        with st.spinner("Creating charts and presentation assets from the active dataset..."):
+        with st.spinner("Building charts and assembling presentation…"):
             ppt_path, slides, chart_paths = presenter.create_presentation(
                 dataset_path=dataset_path,
                 output_path=OUTPUT_DIR / "presentation.pptx",
@@ -831,62 +943,68 @@ def render_presentation_generator(dataset_path: str) -> None:
         st.session_state["ppt_path"] = ppt_path
         st.session_state["slides"] = slides
         st.session_state["chart_paths"] = chart_paths
-        st.success("Presentation generated.")
+        st.success(f"Presentation ready — {len(slides)} slides generated.")
 
     slides = st.session_state.get("slides", [])
     chart_paths = st.session_state.get("chart_paths", {})
 
-    if slides:
-        st.markdown("#### Slide preview")
-        for idx, slide in enumerate(slides, start=1):
-            preview_cols = st.columns([1.08, 0.92])
+    if not slides:
+        st.info("Click **Generate presentation** to build the deck from the active dataset.")
+        return
 
-            with preview_cols[0]:
+    st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
+    st.markdown(f"#### Slide preview &nbsp; <span style='color:var(--muted);font-size:0.88rem;font-weight:400;'>{len(slides)} slides</span>", unsafe_allow_html=True)
+
+    for idx, slide in enumerate(slides, start=1):
+        preview_cols = st.columns([1.1, 0.9])
+
+        with preview_cols[0]:
+            st.markdown(
+                f"""
+                <div class="preview-card">
+                    <div class="slide-number">Slide {idx} of {len(slides)}</div>
+                    <div class="slide-title">{slide.title}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            for bullet in slide.bullets:
+                st.write(f"- {bullet}")
+
+            st.markdown(
+                f"""
+                <div class="notes-box">
+                    <strong>Speaker notes:</strong><br>{slide.speaker_notes}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with preview_cols[1]:
+            if slide.chart_key and slide.chart_key in chart_paths:
+                st.image(str(chart_paths[slide.chart_key]), use_column_width=True)
+            else:
                 st.markdown(
-                    f"""
-                    <div class="preview-card">
-                        <div class="label-text">Slide {idx}</div>
-                        <div class="slide-title">{slide.title}</div>
+                    """
+                    <div class="info-card" style="text-align:center;padding:2rem 1rem;">
+                        <div class="muted" style="font-size:0.88rem;">No chart attached to this slide.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                for bullet in slide.bullets:
-                    st.write(f"- {bullet}")
 
-                st.markdown(
-                    f"""
-                    <div class="notes-box">
-                        <strong>Speaker notes:</strong><br>{slide.speaker_notes}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with preview_cols[1]:
-                if slide.chart_key and slide.chart_key in chart_paths:
-                    st.image(str(chart_paths[slide.chart_key]), width=430)
-                else:
-                    st.markdown(
-                        """
-                        <div class="info-card">
-                            <div class="muted">No chart attached to this slide.</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-            st.markdown("")
+        if idx < len(slides):
+            st.markdown('<hr style="border:none;border-top:1px solid var(--border);margin:0.75rem 0;">', unsafe_allow_html=True)
 
     ppt_path = st.session_state.get("ppt_path")
     if ppt_path and Path(ppt_path).exists():
+        st.markdown('<div class="divider-space"></div>', unsafe_allow_html=True)
         with open(ppt_path, "rb") as file_obj:
             st.download_button(
                 label="Download PowerPoint",
                 data=file_obj.read(),
                 file_name="presentation.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=False,
             )
 
 
@@ -900,9 +1018,20 @@ def render_sidebar(dataset: pd.DataFrame, dataset_name: str) -> None:
 
         st.markdown("---")
         st.markdown("### Active file")
-        st.caption(dataset_name)
-        st.markdown(f"**Rows:** {len(dataset)}")
-        st.markdown(f"**Columns:** {len(dataset.columns)}")
+
+        is_custom = dataset_name != DEFAULT_DATASET_PATH.name
+        label = f"**{dataset_name}**" + (" _(custom)_" if is_custom else " _(bundled)_")
+        st.markdown(label)
+
+        st.markdown(
+            f"""
+            <div class="sidebar-stat"><span>Rows</span><span>{len(dataset):,}</span></div>
+            <div class="sidebar-stat"><span>Columns</span><span>{len(dataset.columns)}</span></div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("")
 
         if st.button("Reset to bundled dataset", use_container_width=True):
             st.session_state["active_dataset_path"] = str(DEFAULT_DATASET_PATH)
@@ -912,6 +1041,13 @@ def render_sidebar(dataset: pd.DataFrame, dataset_name: str) -> None:
             st.session_state["slides"] = []
             st.session_state["chart_paths"] = {}
             rerun_app()
+
+        st.markdown("---")
+        st.markdown("### About")
+        st.caption(
+            "ISE547 · Multi-agent analytics · "
+            "RAG-powered analyst, model evaluation, and presentation generation."
+        )
 
 
 # -----------------------------
@@ -929,33 +1065,24 @@ def main() -> None:
 
     dataset, dataset_name, dataset_path, agent = get_active_dataset()
     render_sidebar(dataset, dataset_name)
-    presenter = build_presenter()
 
-    st.markdown('<div class="app-shell">', unsafe_allow_html=True)
-    render_topbar(dataset_name)
-    render_upload_card(dataset, dataset_name, presenter)
+    render_topbar(dataset_name, dataset)
 
-    page = st.radio(
-        "Navigate",
-        ["Overview", "Analyst Demo", "Evaluation", "Presentation"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    st.markdown(
-        '<div class="nav-note">Use the navigation above to move between the same four sections shown on the public HTML site.</div>',
-        unsafe_allow_html=True,
+    tab_overview, tab_analyst, tab_eval, tab_pres = st.tabs(
+        ["Overview", "Analyst", "Evaluation", "Presentation"]
     )
 
-    if page == "Overview":
+    with tab_overview:
         render_overview(dataset, dataset_name)
-    elif page == "Analyst Demo":
-        render_analyst_demo(agent)
-    elif page == "Evaluation":
-        render_evaluation_dashboard()
-    else:
-        render_presentation_generator(dataset_path)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    with tab_analyst:
+        render_analyst_demo(agent)
+
+    with tab_eval:
+        render_evaluation_dashboard()
+
+    with tab_pres:
+        render_presentation_generator(dataset_path)
 
 
 if __name__ == "__main__":
