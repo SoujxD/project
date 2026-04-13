@@ -214,6 +214,7 @@ async function getSummary(rows) {
   };
 }
 
+/* ── Topbar ── */
 function renderTopbar(page) {
   const nav = [
     ["index.html", "Overview"],
@@ -227,19 +228,18 @@ function renderTopbar(page) {
     <div class="topbar-row">
       <div>
         <div class="kicker">Ecommerce Multi-Agent Analytics</div>
-        <div class="title">Public multi-page site with backend-powered AI agents.</div>
-        <div class="subtitle">
-          GitHub Pages hosts the frontend, while the FastAPI backend handles analyst answers and presentation generation when an API URL is configured.
-        </div>
+        <div class="title">From data to insights to presentation.</div>
+        <div class="subtitle">Interrogate your ecommerce data with an AI analyst agent, benchmark models, and export a stakeholder deck.</div>
       </div>
       <div class="nav-links">
         ${nav}
-        <span class="status-pill">${getDatasetName()}</span>
+        <span class="status-pill" title="${getDatasetName()}">${getDatasetName()}</span>
       </div>
     </div>
   `;
 }
 
+/* ── Upload card (index only) ── */
 function bindUploader() {
   const input = document.getElementById("datasetUpload");
   if (!input) return;
@@ -259,12 +259,12 @@ function renderUploadCard(summary) {
   const host = document.getElementById("uploadCard");
   if (!host) return;
   host.innerHTML = `
-    <div class="upload-card">
+    <div class="upload-card fade-in">
       <div class="section-title">Active dataset</div>
-      <div class="section-subtitle">Upload a customer, session, or ecommerce performance CSV. If an API backend is configured, the AI-agent pages will send this dataset to the backend for live analysis.</div>
+      <div class="section-subtitle">Upload a customer, session, or ecommerce performance CSV to power all tabs.</div>
       <div class="upload-row">
         <input id="datasetUpload" type="file" accept=".csv" />
-        <a class="button-link secondary" href="./assets/default_dataset.csv" download>Download sample CSV</a>
+        <a class="button-link secondary" href="./assets/default_dataset.csv" download>Download sample</a>
         <button class="secondary" id="resetDatasetButton" type="button">Reset to sample</button>
       </div>
       <div class="toolbar" style="margin-top:14px;">
@@ -272,7 +272,6 @@ function renderUploadCard(summary) {
         <span class="tag">Rows: ${summary.rows}</span>
         <span class="tag">Columns: ${summary.columns}</span>
         <span class="tag">Outcome: ${summary.schema?.target || "Not detected"}</span>
-        <span class="tag">${hasBackend() ? "Backend connected" : "Browser fallback mode"}</span>
       </div>
     </div>
   `;
@@ -284,9 +283,10 @@ function renderUploadCard(summary) {
   });
 }
 
+/* ── Shared UI helpers ── */
 function metricCard(label, value, caption) {
   return `
-    <div class="metric-card">
+    <div class="metric-card fade-in">
       <div class="metric-label">${label}</div>
       <div class="metric-value">${value}</div>
       <div class="metric-caption">${caption}</div>
@@ -300,28 +300,28 @@ function tableFromRows(rows) {
   return `
     <div class="dataset-preview">
       <table>
-        <thead><tr>${columns.map((column) => `<th>${column}</th>`).join("")}</tr></thead>
-        <tbody>${rows.map((row) => `<tr>${columns.map((column) => `<td>${row[column] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>
+        <thead><tr>${columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map((row) => `<tr>${columns.map((c) => `<td>${row[c] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>
       </table>
     </div>
   `;
 }
 
-function renderBarList(items, formatter = (value) => value.toFixed(2)) {
-  if (!items.length) return "<p class='muted'>Not enough information to render this comparison.</p>";
+function renderBarList(items, formatter = (v) => v.toFixed(2)) {
+  if (!items.length) return "<p class='muted'>Not enough data to render this comparison.</p>";
   return `<div class="bar-list">${items.map((item) => `
-      <div class="bar-item">
-        <div class="bar-head"><span>${item.key}</span><strong>${formatter(item.value)}</strong></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, item.value * 100)}%"></div></div>
-      </div>`).join("")}</div>`;
+    <div class="bar-item">
+      <div class="bar-head"><span>${item.key}</span><strong>${formatter(item.value)}</strong></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, item.value * 100)}%"></div></div>
+    </div>`).join("")}</div>`;
 }
 
 function retrieveContext(rows, question, topK = 5) {
   const tokens = question.toLowerCase().split(/\W+/).filter(Boolean);
   return rows
     .map((row) => {
-      const text = Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(", ");
-      const score = tokens.reduce((sum, token) => sum + (text.toLowerCase().includes(token) ? 1 : 0), 0);
+      const text = Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(", ");
+      const score = tokens.reduce((sum, t) => sum + (text.toLowerCase().includes(t) ? 1 : 0), 0);
       return { text, score };
     })
     .sort((a, b) => b.score - a.score)
@@ -332,7 +332,7 @@ function buildAnalystFallback(rows, question) {
   const summary = summarizeRows(rows);
   const context = retrieveContext(rows, question, 5);
   const response = {
-    summary: `The active dataset suggests performance concentrates in a few stronger segments and channels, with the current detected outcome rate at ${summary.targetRate !== null ? `${(summary.targetRate * 100).toFixed(1)}%` : "an unclear rate"}.`,
+    summary: `The active dataset suggests performance concentrates in a few stronger segments and channels, with the detected outcome rate at ${summary.targetRate !== null ? `${(summary.targetRate * 100).toFixed(1)}%` : "an unclear rate"}.`,
     key_insights: [
       `Top customer grouping: ${summary.topCustomer}.`,
       `Top channel grouping: ${summary.topChannel}.`,
@@ -352,38 +352,38 @@ function buildAnalystFallback(rows, question) {
   return { response, context };
 }
 
+/* ── Overview page ── */
 async function renderOverviewPage(rows) {
   const summary = await getSummary(rows);
   renderUploadCard(summary);
   document.getElementById("overviewMetrics").innerHTML = [
-    metricCard("Rows", summary.rows, "Records in the active dataset"),
+    metricCard("Rows", summary.rows.toLocaleString(), "Records in the active dataset"),
     metricCard("Columns", summary.columns, "Available fields"),
     metricCard("Outcome Rate", summary.target_rate !== null && summary.target_rate !== undefined ? `${(summary.target_rate * 100).toFixed(1)}%` : "N/A", "Detected conversion or purchase rate"),
     metricCard("Top Segment", summary.top_customer, "Best-performing customer grouping")
   ].join("");
   document.getElementById("overviewContent").innerHTML = `
     <div class="grid-main">
-      <div class="hero-card">
-        <div class="section-title">Current dataset context</div>
-        <p>This overview uses the active uploaded dataset and can call the backend for schema-aware summarization when available.</p>
+      <div class="hero-card fade-in">
+        <div class="section-title">Detected schema</div>
+        <p>Fields automatically inferred from the active dataset.</p>
         <ul>
-          <li>Detected outcome column: ${summary.schema?.target || "Not detected"}</li>
-          <li>Detected customer grouping: ${summary.schema?.customer || "Not detected"}</li>
-          <li>Detected channel grouping: ${summary.schema?.channel || "Not detected"}</li>
-          <li>Detected time grouping: ${summary.schema?.time || "Not detected"}</li>
+          <li>Outcome column: <strong>${summary.schema?.target || "Not detected"}</strong></li>
+          <li>Customer grouping: <strong>${summary.schema?.customer || "Not detected"}</strong></li>
+          <li>Channel grouping: <strong>${summary.schema?.channel || "Not detected"}</strong></li>
+          <li>Time grouping: <strong>${summary.schema?.time || "Not detected"}</strong></li>
         </ul>
       </div>
-      <div class="hero-card">
-        <div class="section-title">Deployment mode</div>
+      <div class="card fade-in" style="animation-delay:0.07s">
+        <div class="section-title">Quick summary</div>
         <ul>
-          <li>Frontend: GitHub Pages static site</li>
-          <li>Backend: ${hasBackend() ? "Connected FastAPI service" : "Not configured"}</li>
-          <li>Analyst and presentation pages use backend AI when available</li>
-          <li>Evaluation remains based on exported benchmark artifacts</li>
+          <li>Best time period: <strong>${summary.top_time}</strong></li>
+          <li>Best channel: <strong>${summary.top_channel}</strong></li>
+          <li>Best segment: <strong>${summary.top_customer}</strong></li>
         </ul>
       </div>
     </div>
-    <div class="card" style="margin-top:18px;">
+    <div class="card fade-in" style="margin-top:18px; animation-delay:0.12s">
       <div class="section-title">Dataset preview</div>
       <div class="section-subtitle">First 12 rows from the active dataset.</div>
       ${tableFromRows(summary.preview || rows.slice(0, 12))}
@@ -391,28 +391,86 @@ async function renderOverviewPage(rows) {
   `;
 }
 
+/* ── Analyst page ── */
+function renderAnalystResponse(responseData) {
+  const r = responseData.parsed_response;
+  const rawEvidence = responseData.retrieved_context || "";
+  const evidenceItems = typeof rawEvidence === "string"
+    ? rawEvidence.split("\n\n").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  return `
+    <div class="card fade-in">
+      <div class="section-title">Analysis</div>
+      <div class="response-grid" style="margin-top:12px;">
+        <div class="response-section summary">
+          <div class="response-label">Summary</div>
+          <p>${r.summary}</p>
+        </div>
+        <div class="response-section insights">
+          <div class="response-label">Key Insights</div>
+          <ul class="response-list">${r.key_insights.map((i) => `<li>${i}</li>`).join("")}</ul>
+        </div>
+        <div class="response-section patterns">
+          <div class="response-label">Patterns</div>
+          <ul class="response-list">${r.patterns.map((p) => `<li>${p}</li>`).join("")}</ul>
+        </div>
+        <div class="response-section recommendations">
+          <div class="response-label">Recommendations</div>
+          <ul class="response-list">${r.recommendations.map((rec) => `<li>${rec}</li>`).join("")}</ul>
+        </div>
+      </div>
+      <span class="confidence-badge confidence-${r.confidence || "medium"}">Confidence: ${r.confidence || "medium"}</span>
+    </div>
+    <div class="card fade-in" style="animation-delay:0.08s">
+      <div class="section-title">Retrieved Evidence</div>
+      <div class="section-subtitle">Top matching records retrieved from the dataset for this question.</div>
+      ${evidenceItems.length
+        ? `<div class="evidence-list">${evidenceItems.map((item, idx) => `
+            <div class="evidence-item">
+              <span class="evidence-num">${idx + 1}</span>
+              <span class="evidence-text">${item}</span>
+            </div>`).join("")}
+          </div>`
+        : "<p class='muted'>No retrieved evidence available.</p>"
+      }
+    </div>
+  `;
+}
+
 async function renderAnalystPage(rows) {
-  const summary = await getSummary(rows);
-  renderUploadCard(summary);
-  const samples = SAMPLE_QUESTIONS.map((question, idx) => `<button class="secondary sample-question" data-question="${question}">Sample ${idx + 1}</button>`).join("");
+  const samples = SAMPLE_QUESTIONS.map((q, idx) =>
+    `<button class="secondary sample-question" data-question="${q}">Sample ${idx + 1}</button>`
+  ).join("");
+
   document.getElementById("analystPage").innerHTML = `
-    <div class="card">
+    <div class="card fade-in">
       <div class="section-title">Analyst Agent Demo</div>
-      <div class="section-subtitle">${hasBackend() ? "This page is connected to the FastAPI backend, so the analyst response is generated by the Python agent." : "This page is using browser fallback mode because no backend API URL is configured."}</div>
+      <div class="section-subtitle">Ask a business question — the agent retrieves relevant data, reasons over it, and returns a structured answer.</div>
       <div class="toolbar">${samples}</div>
-      <div style="margin-top:14px;"><textarea id="questionInput">${SAMPLE_QUESTIONS[0]}</textarea></div>
-      <div class="toolbar" style="margin-top:14px;">
+      <div style="margin-top:14px;"><textarea id="questionInput" placeholder="Enter a business question...">${SAMPLE_QUESTIONS[0]}</textarea></div>
+      <div class="toolbar" style="margin-top:12px;">
         <button id="runAnalystButton" type="button">Run analysis</button>
       </div>
     </div>
-    <div id="analystResults" class="grid-main" style="margin-top:18px;"></div>
+    <div id="analystResults" style="margin-top:18px; display:grid; gap:16px;"></div>
   `;
-  document.querySelectorAll(".sample-question").forEach((button) => button.addEventListener("click", () => {
-    document.getElementById("questionInput").value = button.dataset.question;
-  }));
+
+  document.querySelectorAll(".sample-question").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      document.getElementById("questionInput").value = btn.dataset.question;
+    })
+  );
 
   async function run() {
-    const question = document.getElementById("questionInput").value;
+    const btn = document.getElementById("runAnalystButton");
+    const question = document.getElementById("questionInput").value.trim();
+    if (!question) return;
+
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Analyzing…`;
+    document.getElementById("analystResults").innerHTML = "";
+
     let responseData;
     if (hasBackend() && getStoredCsv()) {
       try {
@@ -430,6 +488,7 @@ async function renderAnalystPage(rows) {
         console.warn("Backend analyst call failed, falling back.", error);
       }
     }
+
     if (!responseData) {
       const fallback = buildAnalystFallback(rows, question);
       responseData = {
@@ -437,75 +496,89 @@ async function renderAnalystPage(rows) {
         retrieved_context: fallback.context.map((item, idx) => `[${idx + 1}] ${item.text}`).join("\n\n")
       };
     }
-    document.getElementById("analystResults").innerHTML = `
-      <div class="card">
-        <div class="section-title">Structured text response</div>
-        <div class="summary-box">Summary\n${responseData.parsed_response.summary}\n\nKey Insights\n- ${responseData.parsed_response.key_insights.join("\n- ")}\n\nPatterns\n- ${responseData.parsed_response.patterns.join("\n- ")}\n\nRecommendations\n- ${responseData.parsed_response.recommendations.join("\n- ")}\n\nConfidence\n${responseData.parsed_response.confidence}</div>
-        <div class="section-title" style="margin-top:16px;">Retrieved evidence</div>
-        <div class="context-box">${responseData.retrieved_context || "No retrieved context returned."}</div>
-      </div>
-      <div class="card">
-        <div class="section-title">JSON output</div>
-        <pre class="json-box">${JSON.stringify(responseData.parsed_response, null, 2)}</pre>
-      </div>
-    `;
+
+    document.getElementById("analystResults").innerHTML = renderAnalystResponse(responseData);
+    btn.disabled = false;
+    btn.innerHTML = "Run analysis";
   }
 
   document.getElementById("runAnalystButton").addEventListener("click", run);
   run();
 }
 
+/* ── Evaluation page ── */
 async function fetchCsv(path) {
   const response = await fetch(path);
   const text = await response.text();
   return Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true }).data;
 }
 
-async function renderEvaluationPage(rows) {
-  const summary = await getSummary(rows);
-  renderUploadCard(summary);
+async function renderEvaluationPage() {
   const [models, prompts, rag] = await Promise.all([
     fetchCsv("./assets/model_comparison.csv"),
     fetchCsv("./assets/prompt_comparison.csv"),
     fetchCsv("./assets/rag_comparison.csv")
   ]);
+
+  const ragOn  = Number(rag.find((r) => String(r.rag_enabled).toLowerCase() === "true")?.overall_score  || 0).toFixed(2);
+  const ragOff = Number(rag.find((r) => String(r.rag_enabled).toLowerCase() === "false")?.overall_score || 0).toFixed(2);
+
   document.getElementById("evaluationPage").innerHTML = `
-    <div class="grid-4">
-      ${metricCard("Best Model", models[0]?.model || "N/A", "Highest benchmark overall score")}
-      ${metricCard("Best Prompt", prompts[0]?.prompt_style || "N/A", "Highest benchmark overall score")}
-      ${metricCard("RAG On", Number(rag.find((row) => String(row.rag_enabled).toLowerCase() === "true")?.overall_score || 0).toFixed(2), "Overall score with retrieval")}
-      ${metricCard("RAG Off", Number(rag.find((row) => String(row.rag_enabled).toLowerCase() === "false")?.overall_score || 0).toFixed(2), "Overall score without retrieval")}
+    <div class="grid-4 fade-in">
+      ${metricCard("Best Model",  models[0]?.model  || "N/A", "Highest overall benchmark score")}
+      ${metricCard("Best Prompt", prompts[0]?.prompt_style || "N/A", "Highest overall benchmark score")}
+      ${metricCard("RAG On",  ragOn,  "Overall score with retrieval")}
+      ${metricCard("RAG Off", ragOff, "Overall score without retrieval")}
     </div>
-    <div class="grid-2" style="margin-top:18px;">
-      <div class="card">
-        <div class="section-title">What the benchmark columns mean</div>
-        <ul>
-          <li><strong>keyword_score</strong>: expected business keyword coverage</li>
-          <li><strong>recommendation_score</strong>: presence and actionability of recommendations</li>
-          <li><strong>completeness_score</strong>: completeness of the required JSON schema</li>
-          <li><strong>groundedness_score</strong>: overlap with retrieved evidence</li>
-          <li><strong>overall_score</strong>: average of the four core metrics</li>
-        </ul>
+
+    <div class="card fade-in" style="margin-top:18px; animation-delay:0.06s">
+      <div class="section-title">Benchmark metrics explained</div>
+      <ul>
+        <li><strong>keyword_score</strong> — expected business keyword coverage</li>
+        <li><strong>recommendation_score</strong> — presence and actionability of recommendations</li>
+        <li><strong>completeness_score</strong> — completeness of the required JSON schema</li>
+        <li><strong>groundedness_score</strong> — overlap with retrieved evidence</li>
+        <li><strong>overall_score</strong> — average of the four core metrics</li>
+      </ul>
+    </div>
+
+    <div class="card fade-in" style="margin-top:18px; animation-delay:0.1s">
+      <div class="eval-section-header">
+        <div class="section-title" style="margin:0;">Model performance</div>
+        <span class="eval-section-pill">Models</span>
       </div>
-      <div class="card">
-        <div class="section-title">Benchmark note</div>
-        <p>The evaluation page mirrors the Streamlit benchmark dashboard using exported CSV artifacts so it stays static and GitHub Pages-compatible.</p>
+      <div class="section-subtitle">Overall score by model — higher is better.</div>
+      ${renderBarList(models.map((r) => ({ key: r.model, value: Number(r.overall_score) })))}
+      <hr class="section-divider">
+      <div class="section-title" style="margin-bottom:12px;">Detailed results</div>
+      ${tableFromRows(models)}
+    </div>
+
+    <div class="card fade-in" style="margin-top:18px; animation-delay:0.14s">
+      <div class="eval-section-header">
+        <div class="section-title" style="margin:0;">Prompt performance</div>
+        <span class="eval-section-pill">Prompts</span>
       </div>
+      <div class="section-subtitle">Overall score by prompt style — higher is better.</div>
+      ${renderBarList(prompts.map((r) => ({ key: r.prompt_style, value: Number(r.overall_score) })))}
+      <hr class="section-divider">
+      <div class="section-title" style="margin-bottom:12px;">Detailed results</div>
+      ${tableFromRows(prompts)}
     </div>
-    <div class="grid-2" style="margin-top:18px;">
-      <div class="card"><div class="section-title">Overall score by model</div>${renderBarList(models.map((row) => ({ key: row.model, value: Number(row.overall_score) })))}</div>
-      <div class="card"><div class="section-title">Overall score by prompt</div>${renderBarList(prompts.map((row) => ({ key: row.prompt_style, value: Number(row.overall_score) })))}</div>
-    </div>
-    <div class="grid-2" style="margin-top:18px;">
-      <div class="card"><div class="section-title">Model table</div>${tableFromRows(models)}</div>
-      <div class="card"><div class="section-title">Prompt table</div>${tableFromRows(prompts)}</div>
+
+    <div class="card fade-in" style="margin-top:18px; animation-delay:0.18s">
+      <div class="eval-section-header">
+        <div class="section-title" style="margin:0;">RAG comparison</div>
+        <span class="eval-section-pill">Retrieval</span>
+      </div>
+      <div class="section-subtitle">How retrieval-augmented generation affects answer quality.</div>
+      ${tableFromRows(rag)}
     </div>
   `;
 }
 
+/* ── Presentation page ── */
 async function renderPresentationPage(rows) {
-  const summary = await getSummary(rows);
-  renderUploadCard(summary);
   let slides;
   let downloadUrl = "./assets/presentation.pptx";
 
@@ -526,50 +599,69 @@ async function renderPresentationPage(rows) {
   }
 
   if (!slides) {
+    const summary = await getSummary(rows);
     slides = [
       {
         title: "E-Commerce Customer Behavior Insights",
-        speaker_notes: "Static preview based on the active dataset.",
-        bullets: [`Dataset rows: ${summary.rows}`, `Detected outcome rate: ${summary.target_rate !== null && summary.target_rate !== undefined ? `${(summary.target_rate * 100).toFixed(1)}%` : "N/A"}`, `Top customer segment: ${summary.top_customer}`],
+        speaker_notes: "High-level overview of the dataset and outcome rate.",
+        bullets: [
+          `${summary.rows.toLocaleString()} records analyzed`,
+          `Detected outcome rate: ${summary.target_rate !== null && summary.target_rate !== undefined ? `${(summary.target_rate * 100).toFixed(1)}%` : "N/A"}`,
+          `Top customer segment: ${summary.top_customer}`
+        ],
         chart_url: "./assets/time_performance.png"
       },
       {
-        title: "Target Customers",
+        title: "Target Customers & Channels",
         speaker_notes: "Customer and channel groupings inferred from the dataset.",
-        bullets: [`Top customer grouping: ${summary.top_customer}`, `Top channel grouping: ${summary.top_channel}`, "Use these segments to guide campaign prioritization and messaging."],
+        bullets: [
+          `Top customer grouping: ${summary.top_customer}`,
+          `Top channel grouping: ${summary.top_channel}`,
+          "Use these segments to guide campaign prioritization and messaging."
+        ],
         chart_url: "./assets/customer_performance.png"
       }
     ];
   }
 
   document.getElementById("presentationPage").innerHTML = `
-    <div class="card">
-      <div class="section-title">Presentation preview</div>
-      <div class="section-subtitle">${hasBackend() ? "When the backend is connected, this page requests a newly generated presentation from the Python presentation agent." : "Backend not configured, so this page shows the latest exported static presentation artifact."}</div>
-      <div class="toolbar"><a class="button-link" href="${downloadUrl}">Download PowerPoint</a></div>
+    <div class="card fade-in">
+      <div class="section-title">Stakeholder presentation</div>
+      <div class="section-subtitle">A ready-to-share PowerPoint deck with dataset insights and strategic recommendations.</div>
+      <div class="toolbar">
+        <a class="button-link" href="${downloadUrl}" download>Download PowerPoint</a>
+        <span class="tag">${slides.length} slides</span>
+      </div>
     </div>
     <div class="slide-grid" style="margin-top:18px;">
-      ${slides.map((slide) => `
-        <div class="preview-card slide">
+      ${slides.map((slide, idx) => `
+        <div class="preview-card slide fade-in" style="animation-delay:${0.06 * idx}s">
           <div>
+            <div class="slide-num">${idx + 1}</div>
             <h3>${slide.title}</h3>
-            <p class="small">${slide.speaker_notes}</p>
-            <ul>${slide.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}</ul>
+            <p class="slide-notes">${slide.speaker_notes}</p>
+            <ul>${slide.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
           </div>
-          <div class="preview-chart">${slide.chart_url ? `<img src="${slide.chart_url}" alt="${slide.title}" />` : "<p class='muted'>No chart attached to this slide.</p>"}</div>
+          <div class="preview-chart">
+            ${slide.chart_url
+              ? `<img src="${slide.chart_url}" alt="${slide.title}" loading="lazy" />`
+              : "<p class='muted small'>No chart for this slide.</p>"
+            }
+          </div>
         </div>
       `).join("")}
     </div>
   `;
 }
 
+/* ── Init ── */
 async function init() {
   const page = document.body.dataset.page;
   renderTopbar(page);
   const rows = await getDataset();
   if (page === "index.html") await renderOverviewPage(rows);
   else if (page === "analyst.html") await renderAnalystPage(rows);
-  else if (page === "evaluation.html") await renderEvaluationPage(rows);
+  else if (page === "evaluation.html") await renderEvaluationPage();
   else if (page === "presentation.html") await renderPresentationPage(rows);
 }
 
