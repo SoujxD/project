@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: ise547-analytics-api
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn api.server:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: ALLOWED_ORIGINS
-        value: https://YOUR_GITHUB_USERNAME.github.io

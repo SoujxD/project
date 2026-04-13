@@ -18,10 +18,21 @@ project/
 │   ├── __init__.py
 │   ├── analyst_agent.py
 │   └── presentation_agent.py
+├── api/
+│   ├── __init__.py
+│   └── server.py
 ├── data/
 │   ├── dataset.csv
 │   ├── evaluation_questions.json
 │   └── generate_sample_data.py
+├── docs/
+│   ├── index.html
+│   ├── analyst.html
+│   ├── evaluation.html
+│   ├── presentation.html
+│   ├── app.js
+│   ├── config.js
+│   └── styles.css
 ├── evaluation/
 │   ├── __init__.py
 │   ├── evaluator.py
@@ -29,16 +40,18 @@ project/
 ├── outputs/
 │   └── ...
 ├── ui/
-│   ├── app.py
-│   └── index.html
+│   └── app.py
 ├── utils/
 │   ├── __init__.py
 │   ├── llm_client.py
 │   ├── parser.py
 │   └── retriever.py
+├── Dockerfile
+├── fly.toml
 ├── main.py
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── requirements.fly.txt
 ```
 
 ## System Architecture
@@ -254,20 +267,25 @@ window.APP_CONFIG = {
 };
 ```
 
-## Deploy the Backend on Render
+## Deploy the Backend on Fly.io
 
-This repo includes a starter [render.yaml](/Users/shubhangimittal/Desktop/ISE547/project/render.yaml).
+This repo includes:
+
+- [Dockerfile](/Users/shubhangimittal/Desktop/ISE547/project/Dockerfile)
+- [fly.toml](/Users/shubhangimittal/Desktop/ISE547/project/fly.toml)
+- [requirements.fly.txt](/Users/shubhangimittal/Desktop/ISE547/project/requirements.fly.txt)
 
 Basic steps:
 
 1. Push the repository to GitHub.
-2. Create a new Render web service from the repo.
-3. Use the included `render.yaml` or configure:
-   - Build command: `pip install -r requirements.txt`
-   - Start command: `uvicorn api.server:app --host 0.0.0.0 --port $PORT`
-4. Set `ALLOWED_ORIGINS` to your GitHub Pages origin.
-5. Copy the deployed backend URL into `docs/config.js`.
-6. Push again and redeploy GitHub Pages.
+2. Authenticate with Fly.io using `flyctl auth login`.
+3. Create the app if needed: `flyctl apps create <app-name>`.
+4. Set required secrets such as:
+   - `flyctl secrets set OPENROUTER_API_KEY=... -a <app-name>`
+   - `flyctl secrets set ALLOWED_ORIGINS=https://your-github-pages-domain -a <app-name>`
+5. Deploy with `flyctl deploy -c fly.toml -a <app-name>`.
+6. Copy the deployed backend URL into `docs/config.js`.
+7. Push again and redeploy GitHub Pages.
 
 ## Local Backend Run
 
