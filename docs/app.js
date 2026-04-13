@@ -439,17 +439,56 @@ function renderAnalystResponse(responseData) {
 }
 
 async function renderAnalystPage(rows) {
+  // Load model and prompt options from the same CSVs used by evaluation
+  const [modelRows, promptRows] = await Promise.all([
+    fetchCsv("./assets/model_comparison.csv"),
+    fetchCsv("./assets/prompt_comparison.csv")
+  ]);
+  const modelOptions = modelRows.map((r) => r.model).filter(Boolean);
+  const promptOptions = promptRows.map((r) => r.prompt_style).filter(Boolean);
+
+  const DEFAULT_MODEL = "meta-llama/llama-3.1-8b-instruct";
+  const DEFAULT_PROMPT = "structured_json";
+
   const samples = SAMPLE_QUESTIONS.map((q, idx) =>
     `<button class="secondary sample-question" data-question="${q}">Sample ${idx + 1}</button>`
   ).join("");
+
+  const modelSelect = `
+    <div class="select-group">
+      <label class="select-label" for="modelSelect">Model</label>
+      <select id="modelSelect">
+        ${modelOptions.map((m) => `<option value="${m}" ${m === DEFAULT_MODEL ? "selected" : ""}>${m.split("/").pop()}</option>`).join("")}
+      </select>
+    </div>`;
+
+  const promptSelect = `
+    <div class="select-group">
+      <label class="select-label" for="promptSelect">Prompt style</label>
+      <select id="promptSelect">
+        ${promptOptions.map((p) => `<option value="${p}" ${p === DEFAULT_PROMPT ? "selected" : ""}>${p.replace(/_/g, " ")}</option>`).join("")}
+      </select>
+    </div>`;
+
+  const ragToggle = `
+    <div class="select-group">
+      <label class="select-label" for="ragSelect">Retrieval (RAG)</label>
+      <select id="ragSelect">
+        <option value="true" selected>Enabled</option>
+        <option value="false">Disabled</option>
+      </select>
+    </div>`;
 
   document.getElementById("analystPage").innerHTML = `
     <div class="card fade-in">
       <div class="section-title">Analyst Agent Demo</div>
       <div class="section-subtitle">Ask a business question — the agent retrieves relevant data, reasons over it, and returns a structured answer.</div>
-      <div class="toolbar">${samples}</div>
-      <div style="margin-top:14px;"><textarea id="questionInput" placeholder="Enter a business question...">${SAMPLE_QUESTIONS[0]}</textarea></div>
-      <div class="toolbar" style="margin-top:12px;">
+      <div class="toolbar" style="margin-bottom:14px;">${samples}</div>
+      <textarea id="questionInput" placeholder="Enter a business question...">${SAMPLE_QUESTIONS[0]}</textarea>
+      <div class="config-row" style="margin-top:14px;">
+        ${modelSelect}${promptSelect}${ragToggle}
+      </div>
+      <div class="toolbar" style="margin-top:14px;">
         <button id="runAnalystButton" type="button">Run analysis</button>
       </div>
     </div>
@@ -467,6 +506,10 @@ async function renderAnalystPage(rows) {
     const question = document.getElementById("questionInput").value.trim();
     if (!question) return;
 
+    const model       = document.getElementById("modelSelect").value;
+    const promptStyle = document.getElementById("promptSelect").value;
+    const ragEnabled  = document.getElementById("ragSelect").value === "true";
+
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner"></span> Analyzing…`;
     document.getElementById("analystResults").innerHTML = "";
@@ -478,9 +521,9 @@ async function renderAnalystPage(rows) {
           method: "POST",
           body: makeFormData({
             question,
-            model: "meta-llama/llama-3.1-8b-instruct",
-            prompt_style: "structured_json",
-            rag_enabled: true,
+            model,
+            prompt_style: promptStyle,
+            rag_enabled: ragEnabled,
             top_k: 5
           })
         });
