@@ -30,6 +30,8 @@ class EDAChart:
 class EDAAgent:
     """Profiles datasets, runs quality checks, generates charts, and prepares analyst handoff context."""
 
+    CACHE_VERSION = "light-eda-v2"
+
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
         self.chart_dir = self.output_dir / "charts"
@@ -309,7 +311,7 @@ class EDAAgent:
         ]
         chunks.extend(f"Quality warning: {warning}" for warning in quality_report["warnings"][:5])
         chunks.extend(f"Suggested analyst question: {question}" for question in suggested_questions[:5])
-        chunks.extend(f"Chart insight: {chart['title']} — {chart['caption']}" for chart in chart_manifest[:6])
+        chunks.extend(f"Chart insight: {chart['title']} — {chart['caption']}" for chart in chart_manifest[:4])
         return chunks
 
     def _plot_bar(self, series: pd.Series, title: str, path: Path, horizontal: bool = False, ylabel: str = "Value") -> None:
@@ -360,6 +362,69 @@ class EDAAgent:
         fig.savefig(path, dpi=180)
         plt.close(fig)
 
+    def _plot_area(self, series: pd.Series, title: str, path: Path, ylabel: str = "Value") -> None:
+        cleaned = pd.to_numeric(series, errors="coerce").dropna()
+        if cleaned.empty:
+            return
+        fig, ax = plt.subplots(figsize=(8, 4.4))
+        x = np.arange(len(cleaned))
+        y = cleaned.values.astype(float)
+        ax.plot(x, y, color="#1E5F74", linewidth=2.2)
+        ax.fill_between(x, y, color="#9ED8DB", alpha=0.65)
+        ax.set_xticks(x)
+        ax.set_xticklabels([str(value) for value in cleaned.index], rotation=22, ha="right")
+        ax.set_title(title, fontsize=13)
+        ax.set_xlabel("")
+        ax.set_ylabel(ylabel)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(path, dpi=180)
+        plt.close(fig)
+
+    def _plot_doughnut(self, series: pd.Series, title: str, path: Path) -> None:
+        cleaned = series.dropna()
+        if cleaned.empty:
+            return
+        fig, ax = plt.subplots(figsize=(6.8, 4.8))
+        palette = ["#1E5F74", "#4F8FBF", "#9ED8DB", "#FFC857", "#F29E4C", "#C7D3DD"]
+        wedges, _ = ax.pie(
+            cleaned.values,
+            startangle=90,
+            colors=palette[: len(cleaned)],
+            wedgeprops={"width": 0.42, "edgecolor": "white"},
+        )
+        ax.legend(
+            wedges,
+            [str(value) for value in cleaned.index],
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            frameon=False,
+            fontsize=9,
+        )
+        ax.set_title(title, fontsize=13)
+        fig.tight_layout()
+        fig.savefig(path, dpi=180, bbox_inches="tight")
+        plt.close(fig)
+
+    def _plot_scatter(self, dataset: pd.DataFrame, x_col: str, y_col: str, title: str, path: Path) -> None:
+        frame = dataset[[x_col, y_col]].copy()
+        frame[x_col] = pd.to_numeric(frame[x_col], errors="coerce")
+        frame[y_col] = pd.to_numeric(frame[y_col], errors="coerce")
+        frame = frame.dropna().head(1500)
+        if frame.empty:
+            return
+        fig, ax = plt.subplots(figsize=(7.8, 4.8))
+        ax.scatter(frame[x_col], frame[y_col], alpha=0.45, s=24, color="#1E5F74", edgecolors="none")
+        ax.set_title(title, fontsize=13)
+        ax.set_xlabel(x_col)
+        ax.set_ylabel(y_col)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(path, dpi=180)
+        plt.close(fig)
+
     def _chart_manifest(
         self,
         dataset: pd.DataFrame,
@@ -371,6 +436,7 @@ class EDAAgent:
         schema = profile["schema"]
         target_metric = self._target_metric(dataset, schema)
         charts: list[EDAChart] = []
+        max_charts = 4
 
         missing = pd.Series(
             {row["column"]: row["missing_pct"] for row in quality_report["missing_summary"] if row["missing_pct"] > 0}
@@ -380,46 +446,94 @@ class EDAAgent:
             self._plot_bar(missing.head(10), "Missing Values by Column", path, horizontal=True, ylabel="Missing %")
             charts.append(EDAChart("missingness", "Missing values by column", "Shows the columns with the highest percentage of missing values.", path))
 
-        for key, title, caption in [
-            ("time", "Performance by time", "Compares the detected outcome across time groups when a time field is available."),
-            ("customer", "Performance by customer grouping", "Highlights which detected segment or customer grouping performs best."),
-            ("channel", "Performance by channel grouping", "Shows which detected acquisition or category grouping performs best."),
-        ]:
-            series = self._group_metric(dataset, schema.get(key), target_metric)
-            if series is not None and len(series):
-                path = self.chart_dir / f"{chart_prefix}_{key}_performance.png"
-                self._plot_bar(series.head(10), title.title(), path, horizontal=key != "time", ylabel="Outcome Rate" if target_metric is not None else "Share")
-                charts.append(EDAChart(f"{key}_performance", title.title(), caption, path))
+        time_series = self._group_metric(dataset, schema.get("time"), target_metric)
+        if time_series is not None and len(time_series) and len(charts) < max_charts:
+            path = self.chart_dir / f"{chart_prefix}_time_area.png"
+            self._plot_area(
+                time_series.head(12),
+                "Trend Across Time",
+                path,
+                ylabel="Outcome Rate" if target_metric is not None else "Volume",
+            )
+            charts.append(
+                EDAChart(
+                    "time_area",
+                    "Trend across time",
+                    "Uses a light area chart to show how the main business signal changes across the detected time field.",
+                    path,
+                )
+            )
+
+        mix_dimension = schema.get("channel") or schema.get("customer") or schema.get("product")
+        if mix_dimension and mix_dimension in dataset.columns and len(charts) < max_charts:
+            mix_series = dataset[mix_dimension].astype(str).value_counts().head(5)
+            if len(mix_series):
+                path = self.chart_dir / f"{chart_prefix}_mix_doughnut.png"
+                self._plot_doughnut(mix_series, f"Share of Top {mix_dimension} Groups", path)
+                charts.append(
+                    EDAChart(
+                        "mix_doughnut",
+                        f"Share of top {mix_dimension} groups",
+                        "Summarizes the dominant business segments with a compact doughnut view.",
+                        path,
+                    )
+                )
 
         primary_numeric = schema.get("engagement")
         if not primary_numeric and profile["numeric_columns"]:
             primary_numeric = profile["numeric_columns"][0]
-        bucket_series, bucket_col = self._numeric_bucket_metric(dataset, primary_numeric, target_metric)
-        if bucket_series is not None and len(bucket_series):
-            path = self.chart_dir / f"{chart_prefix}_numeric_buckets.png"
-            self._plot_bar(bucket_series, f"Performance by {bucket_col} Bucket", path, ylabel="Outcome Rate" if target_metric is not None else "Count")
-            charts.append(EDAChart("numeric_buckets", f"Performance by {bucket_col} bucket", "Buckets a strong numeric variable to show how performance changes across its range.", path))
-
         numeric_candidates = dataset.select_dtypes(include=["number"]).copy()
-        if len(numeric_candidates.columns) >= 2:
+        if (
+            primary_numeric
+            and primary_numeric in dataset.columns
+            and schema.get("target")
+            and schema["target"] in dataset.columns
+            and len(charts) < max_charts
+        ):
+            path = self.chart_dir / f"{chart_prefix}_engagement_scatter.png"
+            self._plot_scatter(dataset, primary_numeric, schema["target"], f"{primary_numeric} vs {schema['target']}", path)
+            charts.append(
+                EDAChart(
+                    "engagement_scatter",
+                    f"{primary_numeric} vs {schema['target']}",
+                    "Shows how a strong numeric behavior signal relates to the detected outcome variable.",
+                    path,
+                )
+            )
+        elif len(numeric_candidates.columns) >= 2 and len(charts) < max_charts:
             corr = numeric_candidates.corr(numeric_only=True).round(2)
             if corr.shape[0] > 1:
                 path = self.chart_dir / f"{chart_prefix}_correlation_heatmap.png"
-                self._plot_heatmap(corr.iloc[:8, :8], "Numeric Correlation Heatmap", path)
-                charts.append(EDAChart("correlation_heatmap", "Numeric correlation heatmap", "Shows the strongest relationships among numeric fields in the analysis dataset.", path))
+                self._plot_heatmap(corr.iloc[:6, :6], "Numeric Correlation Heatmap", path)
+                charts.append(
+                    EDAChart(
+                        "correlation_heatmap",
+                        "Numeric correlation heatmap",
+                        "Highlights the strongest numeric relationships in the normalized analysis view.",
+                        path,
+                    )
+                )
 
-        distribution_col = None
-        for candidate in [schema.get("engagement"), *profile["numeric_columns"]]:
-            if candidate and candidate in dataset.columns:
-                distribution_col = candidate
-                break
-        if distribution_col:
-            path = self.chart_dir / f"{chart_prefix}_distribution.png"
-            self._plot_hist(pd.to_numeric(dataset[distribution_col], errors="coerce"), f"Distribution of {distribution_col}", path)
-            charts.append(EDAChart("distribution", f"Distribution of {distribution_col}", "Shows how the strongest detected numeric metric is distributed.", path))
+        if len(charts) < 3:
+            distribution_col = None
+            for candidate in [schema.get("engagement"), *profile["numeric_columns"]]:
+                if candidate and candidate in dataset.columns:
+                    distribution_col = candidate
+                    break
+            if distribution_col:
+                path = self.chart_dir / f"{chart_prefix}_distribution.png"
+                self._plot_hist(pd.to_numeric(dataset[distribution_col], errors="coerce"), f"Distribution of {distribution_col}", path)
+                charts.append(
+                    EDAChart(
+                        "distribution",
+                        f"Distribution of {distribution_col}",
+                        "Shows how the most informative detected numeric field is distributed across the dataset.",
+                        path,
+                    )
+                )
 
         manifest: list[dict[str, Any]] = []
-        for chart in charts:
+        for chart in charts[:max_charts]:
             shutil.copy2(chart.path, self.docs_asset_dir / chart.path.name)
             manifest.append({
                 "key": chart.key,
@@ -432,7 +546,7 @@ class EDAAgent:
 
     def _cache_path(self, cache_key: str) -> Path:
         self._ensure_dirs()
-        return self.cache_dir / f"{cache_key}.json"
+        return self.cache_dir / f"{self.CACHE_VERSION}_{cache_key}.json"
 
     def _load_cached_report(self, cache_key: str) -> dict[str, Any] | None:
         cache_path = self._cache_path(cache_key)
