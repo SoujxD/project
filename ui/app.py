@@ -278,6 +278,68 @@ def inject_styles() -> None:
         }
         .notes-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
 
+        .eda-hero {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 90% 0%, rgba(78,165,217,0.15), transparent 32%),
+                linear-gradient(135deg, rgba(255,255,255,0.96), rgba(244,249,251,0.9));
+        }
+        .eda-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(29,102,125,0.08);
+            color: var(--accent);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .eda-chip-row {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            margin-top: 0.85rem;
+        }
+        .eda-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.82);
+            border: 1px solid rgba(29,102,125,0.08);
+            color: #173746;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .eda-chart-card {
+            background: rgba(255,255,255,0.94);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            padding: 1rem 1rem 0.9rem;
+        }
+        .eda-chart-title {
+            font-size: 0.98rem;
+            font-weight: 740;
+            color: #173746;
+        }
+        .eda-chart-caption {
+            color: var(--muted);
+            font-size: 0.84rem;
+            line-height: 1.55;
+            margin: 0.25rem 0 0.8rem;
+        }
+        .eda-handoff {
+            background: linear-gradient(180deg, rgba(29,102,125,0.05), rgba(78,165,217,0.04));
+            border: 1px solid rgba(29,102,125,0.09);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+        }
+
         /* ── Buttons ── */
         .stButton > button, .stDownloadButton > button {
             border-radius: 999px !important;
@@ -687,21 +749,33 @@ def render_eda(dataset_path: str) -> dict[str, Any]:
     with left:
         section_header("Dataset profile")
         schema = profile["schema"]
+        chip_html = "".join(
+            f'<span class="eda-chip">{label}: {value or "Not detected"}</span>'
+            for label, value in [
+                ("Target", schema.get("target")),
+                ("Time", schema.get("time")),
+                ("Customer", schema.get("customer")),
+                ("Channel", schema.get("channel")),
+            ]
+        )
+        rows_html = (
+            '<div class="card eda-hero">'
+            '<div class="eda-pill">EDA Agent</div>'
+            '<div class="sec-title" style="margin-top:0.8rem;">Visual dataset intelligence before analyst reasoning</div>'
+            '<div class="small" style="margin-top:0.35rem;">The EDA agent standardizes the uploaded dataset, surfaces quality issues, and generates the first wave of reusable business visuals.</div>'
+            f'<div class="eda-chip-row">{chip_html}</div>'
+        )
         schema_rows = {
             "Source format": profile["source_format"],
             "Analysis grain": profile["analysis_grain"],
-            "Target column": schema.get("target"),
-            "Time column": schema.get("time"),
-            "Customer grouping": schema.get("customer"),
-            "Channel grouping": schema.get("channel"),
             "Product grouping": schema.get("product"),
             "Engagement metric": schema.get("engagement"),
         }
-        rows_html = ""
         for key, value in schema_rows.items():
             val_html = f'<span class="schema-val">{value}</span>' if value else '<span class="schema-nd">not detected</span>'
             rows_html += f'<div class="schema-row"><span class="schema-key">{key}</span>{val_html}</div>'
-        st.markdown(f'<div class="card">{rows_html}</div>', unsafe_allow_html=True)
+        rows_html += '</div>'
+        st.markdown(rows_html, unsafe_allow_html=True)
 
     with right:
         section_header("Suggested business questions")
@@ -742,8 +816,8 @@ def render_eda(dataset_path: str) -> dict[str, Any]:
             for col, chart in zip(cols, charts[idx: idx + 2]):
                 with col:
                     st.markdown(
-                        f'<div class="card card-accent"><div class="sec-title" style="font-size:0.98rem;">{chart["title"]}</div>'
-                        f'<div class="small" style="margin:0.25rem 0 0.8rem;">{chart["caption"]}</div></div>',
+                        f'<div class="eda-chart-card"><div class="eda-chart-title">{chart["title"]}</div>'
+                        f'<div class="eda-chart-caption">{chart["caption"]}</div></div>',
                         unsafe_allow_html=True,
                     )
                     st.image(chart["path"], width=520)
@@ -762,8 +836,9 @@ def render_eda(dataset_path: str) -> dict[str, Any]:
         )
     with handoff_right:
         section_header("Handoff summary for analyst")
-        with st.expander("Structured handoff payload", expanded=True):
-            st.json(report["handoff_summary"], expanded=True)
+        st.markdown('<div class="eda-handoff">', unsafe_allow_html=True)
+        st.json(report["handoff_summary"], expanded=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     return report
 

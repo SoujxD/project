@@ -758,6 +758,109 @@ select:focus {
   background: white;
 }
 
+/* ── EDA-specific polish ── */
+.eda-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(134, 192, 193, 0.22), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 251, 252, 0.92));
+}
+
+.eda-hero::after {
+  content: "";
+  position: absolute;
+  right: -40px;
+  top: -40px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(78, 145, 187, 0.12), transparent 68%);
+  pointer-events: none;
+}
+
+.eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(30, 96, 117, 0.08);
+  color: var(--primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eda-chip-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.eda-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.78);
+  border: 1px solid rgba(30, 96, 117, 0.09);
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.eda-chart-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.eda-chart-copy {
+  padding: 18px 20px 10px;
+}
+
+.eda-chart-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.eda-chart-caption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.eda-chart-frame {
+  padding: 0 18px 18px;
+}
+
+.eda-chart-frame img {
+  width: 100%;
+  display: block;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 22px rgba(30, 78, 97, 0.08);
+}
+
+.eda-note-box {
+  background: linear-gradient(180deg, rgba(30, 96, 117, 0.05), rgba(78, 145, 187, 0.03));
+  border: 1px solid rgba(30, 96, 117, 0.09);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.eda-note-box pre {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
 /* ── Responsive ── */
 @media (max-width: 1000px) {
   .grid-4,

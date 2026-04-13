@@ -791,14 +791,19 @@ async function renderEdaPage(rows) {
     </div>
 
     <div class="grid-main" style="margin-top:18px;">
-      <div class="hero-card fade-in">
-        <div class="section-title">Dataset profile</div>
-        <p class="section-subtitle">Deterministic profiling runs before the analyst agent so the rest of the workflow operates from a cleaner business view.</p>
-        <ul>
+      <div class="hero-card eda-hero fade-in">
+        <div class="eyebrow-pill">EDA Agent</div>
+        <div class="section-title" style="margin-top:12px;">Visual dataset intelligence before analyst reasoning</div>
+        <p class="section-subtitle">Deterministic profiling runs before the analyst agent so the rest of the workflow operates from a cleaner business view with stronger structure, clearer warnings, and better chart context.</p>
+        <div class="eda-chip-row">
+          <span class="eda-chip">Target: ${schema.target || "Not detected"}</span>
+          <span class="eda-chip">Time: ${schema.time || "Not detected"}</span>
+          <span class="eda-chip">Customer: ${schema.customer || "Not detected"}</span>
+          <span class="eda-chip">Channel: ${schema.channel || "Not detected"}</span>
+        </div>
+        <ul style="margin-top:16px;">
           <li>Source format: <strong>${profile.source_format || "Unknown"}</strong></li>
           <li>Analysis grain: <strong>${profile.analysis_grain || "rows"}</strong></li>
-          <li>Target column: <strong>${schema.target || "Not detected"}</strong></li>
-          <li>Time column: <strong>${schema.time || "Not detected"}</strong></li>
           <li>Customer grouping: <strong>${schema.customer || "Not detected"}</strong></li>
           <li>Channel grouping: <strong>${schema.channel || "Not detected"}</strong></li>
         </ul>
@@ -828,12 +833,12 @@ async function renderEdaPage(rows) {
       <div class="section-subtitle">These visuals are generated directly from the uploaded dataset before the analyst agent answers any question.</div>
       <div class="slide-grid" style="margin-top:14px;">
         ${(report.chart_manifest || []).length ? report.chart_manifest.map((chart, idx) => `
-          <div class="preview-card slide" style="animation-delay:${0.04 * idx}s">
-            <div>
-              <h3>${chart.title}</h3>
-              <p class="slide-notes">${chart.caption}</p>
+          <div class="preview-card slide eda-chart-card" style="animation-delay:${0.04 * idx}s">
+            <div class="eda-chart-copy">
+              <div class="eda-chart-title">${chart.title}</div>
+              <div class="eda-chart-caption">${chart.caption}</div>
             </div>
-            <div class="preview-chart">
+            <div class="eda-chart-frame">
               ${chart.chart_url ? `<img src="${chart.chart_url}" alt="${chart.title}" loading="lazy" />` : "<p class='muted small'>Backend chart unavailable in fallback mode.</p>"}
             </div>
           </div>
@@ -850,7 +855,7 @@ async function renderEdaPage(rows) {
       <div class="card fade-in" style="animation-delay:0.05s">
         <div class="section-title">Handoff summary for analyst</div>
         <div class="section-subtitle">Structured context passed into the analyst stage.</div>
-        <div class="response-section summary"><pre style="margin:0;white-space:pre-wrap;">${JSON.stringify(report.handoff_summary || {}, null, 2)}</pre></div>
+        <div class="eda-note-box"><pre>${JSON.stringify(report.handoff_summary || {}, null, 2)}</pre></div>
       </div>
     </div>
   `;
