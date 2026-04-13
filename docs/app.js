@@ -440,15 +440,30 @@ function renderAnalystResponse(responseData) {
 
 async function renderAnalystPage(rows) {
   // Load model and prompt options from the same CSVs used by evaluation
-  const [modelRows, promptRows] = await Promise.all([
-    fetchCsv("./assets/model_comparison.csv"),
-    fetchCsv("./assets/prompt_comparison.csv")
-  ]);
+  let modelRows = [];
+  let promptRows = [];
+  try {
+    [modelRows, promptRows] = await Promise.all([
+      fetchCsv("./assets/model_comparison.csv"),
+      fetchCsv("./assets/prompt_comparison.csv")
+    ]);
+  } catch (error) {
+    console.warn("Could not load evaluation CSVs for analyst selectors, using fallback options.", error);
+  }
   const modelOptions = modelRows.map((r) => r.model).filter(Boolean);
   const promptOptions = promptRows.map((r) => r.prompt_style).filter(Boolean);
 
   const DEFAULT_MODEL = "meta-llama/llama-3.1-8b-instruct";
   const DEFAULT_PROMPT = "structured_json";
+  const FALLBACK_MODELS = [
+    "meta-llama/llama-3.1-8b-instruct",
+    "mistralai/mistral-7b-instruct",
+    "google/gemma-2-9b-it",
+    "qwen/qwen-2.5-7b-instruct"
+  ];
+  const FALLBACK_PROMPTS = ["basic", "structured_json", "executive", "evidence_constrained"];
+  const finalModelOptions = modelOptions.length ? modelOptions : FALLBACK_MODELS;
+  const finalPromptOptions = promptOptions.length ? promptOptions : FALLBACK_PROMPTS;
 
   const samples = SAMPLE_QUESTIONS.map((q, idx) =>
     `<button class="secondary sample-question" data-question="${q}">Sample ${idx + 1}</button>`
@@ -458,7 +473,7 @@ async function renderAnalystPage(rows) {
     <div class="select-group">
       <label class="select-label" for="modelSelect">Model</label>
       <select id="modelSelect">
-        ${modelOptions.map((m) => `<option value="${m}" ${m === DEFAULT_MODEL ? "selected" : ""}>${m.split("/").pop()}</option>`).join("")}
+        ${finalModelOptions.map((m) => `<option value="${m}" ${m === DEFAULT_MODEL ? "selected" : ""}>${m.split("/").pop()}</option>`).join("")}
       </select>
     </div>`;
 
@@ -466,7 +481,7 @@ async function renderAnalystPage(rows) {
     <div class="select-group">
       <label class="select-label" for="promptSelect">Prompt style</label>
       <select id="promptSelect">
-        ${promptOptions.map((p) => `<option value="${p}" ${p === DEFAULT_PROMPT ? "selected" : ""}>${p.replace(/_/g, " ")}</option>`).join("")}
+        ${finalPromptOptions.map((p) => `<option value="${p}" ${p === DEFAULT_PROMPT ? "selected" : ""}>${p.replace(/_/g, " ")}</option>`).join("")}
       </select>
     </div>`;
 

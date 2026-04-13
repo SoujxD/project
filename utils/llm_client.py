@@ -85,10 +85,11 @@ class LLMClient:
         digest = hashlib.sha256(f"{model}|{prompt}".encode("utf-8")).hexdigest()
         confidence_levels = ["low", "medium", "high"]
         confidence = confidence_levels[int(digest[0], 16) % len(confidence_levels)]
+        prompt_style = self._extract_between(prompt, "Prompt style:", "Question:").strip() or "structured_json"
         question = self._extract_between(prompt, "Question:", "Dataset context:").strip()
         context = self._extract_between(prompt, "Dataset context:", "Return JSON in exactly this schema:").strip()
         rows = self._parse_context_rows(context)
-        response = self._build_question_aware_mock(question, rows, confidence)
+        response = self._build_question_aware_mock(question, rows, confidence, model, prompt_style)
         text = json.dumps(
             response,
             indent=2,
@@ -167,8 +168,38 @@ class LLMClient:
             return None
         return max(counts.items(), key=lambda item: item[1])[0]
 
-    def _build_question_aware_mock(self, question: str, rows: list[dict[str, Any]], confidence: str) -> dict[str, Any]:
+    def _model_profile(self, model: str) -> dict[str, Any]:
+        model_lower = model.lower()
+        if "llama" in model_lower:
+            return {"detail": 3, "keyword_bias": 1.0, "risk": "balanced"}
+        if "mistral" in model_lower:
+            return {"detail": 2, "keyword_bias": 0.9, "risk": "concise"}
+        if "gemma" in model_lower:
+            return {"detail": 2, "keyword_bias": 0.8, "risk": "cautious"}
+        if "qwen" in model_lower:
+            return {"detail": 3, "keyword_bias": 1.1, "risk": "analytical"}
+        return {"detail": 2, "keyword_bias": 0.9, "risk": "balanced"}
+
+    def _prompt_profile(self, prompt_style: str) -> dict[str, Any]:
+        profiles = {
+            "basic": {"recommendations": 2, "patterns": 1, "strict_grounding": False, "tone": "simple"},
+            "structured_json": {"recommendations": 3, "patterns": 2, "strict_grounding": False, "tone": "structured"},
+            "executive": {"recommendations": 3, "patterns": 1, "strict_grounding": False, "tone": "executive"},
+            "evidence_constrained": {"recommendations": 2, "patterns": 2, "strict_grounding": True, "tone": "evidence"},
+        }
+        return profiles.get(prompt_style, profiles["structured_json"])
+
+    def _build_question_aware_mock(
+        self,
+        question: str,
+        rows: list[dict[str, Any]],
+        confidence: str,
+        model: str,
+        prompt_style: str,
+    ) -> dict[str, Any]:
         q = question.lower()
+        model_profile = self._model_profile(model)
+        prompt_profile = self._prompt_profile(prompt_style)
         revenue_col = self._find_column(rows, ["revenue", "converted", "purchase", "order"])
         customer_col = self._find_column(rows, ["visitor", "customer", "segment", "browser", "device"])
         channel_col = self._find_column(rows, ["traffic", "channel", "source", "campaign"])
@@ -191,23 +222,26 @@ class LLMClient:
         patterns: list[str] = []
         recommendations: list[str] = []
 
+        def maybe_add_keyword(term: str, sentence: str) -> str:
+            return f"{sentence} This points to {term}." if model_profile["keyword_bias"] > 0.95 else sentence
+
         if any(term in q for term in ["segment", "visitor", "customer", "target"]):
             if customer_col:
                 best_customer = self._mode(positives or rows, customer_col)
-                insights.append(f"{customer_col} {best_customer} appears most often in the strongest retrieved records.")
+                insights.append(maybe_add_keyword("customer segmentation", f"{customer_col} {best_customer} appears most often in the strongest retrieved records."))
                 patterns.append(f"{customer_col} is a key grouping variable for answering this question.")
                 recommendations.append(f"Prioritize campaigns and journeys for the {best_customer} segment.")
 
         if any(term in q for term in ["channel", "traffic", "source", "acquisition"]):
             if channel_col:
                 best_channel = self._mode(positives or rows, channel_col)
-                insights.append(f"{channel_col} {best_channel} is the most prominent high-performing acquisition group in the retrieved context.")
+                insights.append(maybe_add_keyword("channel efficiency", f"{channel_col} {best_channel} is the most prominent high-performing acquisition group in the retrieved context."))
                 recommendations.append(f"Allocate more testing budget toward {channel_col} {best_channel}.")
 
         if any(term in q for term in ["month", "time", "season", "week", "day"]):
             if time_col:
                 best_time = self._mode(positives or rows, time_col)
-                insights.append(f"{time_col} {best_time} appears most frequently among the stronger retrieved rows.")
+                insights.append(maybe_add_keyword("seasonality", f"{time_col} {best_time} appears most frequently among the stronger retrieved rows."))
                 patterns.append(f"Performance may vary meaningfully across {time_col.lower()} groupings.")
 
         if any(term in q for term in ["bounce", "exit", "friction", "drop"]):
@@ -215,7 +249,7 @@ class LLMClient:
                 pos_avg = self._avg(positives, bounce_col) if positives else None
                 neg_avg = self._avg(negatives, bounce_col) if negatives else None
                 if pos_avg is not None and neg_avg is not None:
-                    insights.append(f"{bounce_col} is lower in stronger rows ({pos_avg:.3f}) than in weaker rows ({neg_avg:.3f}).")
+                    insights.append(maybe_add_keyword("reduced abandonment", f"{bounce_col} is lower in stronger rows ({pos_avg:.3f}) than in weaker rows ({neg_avg:.3f})."))
                     patterns.append(f"Lower {bounce_col} aligns with better business outcomes in the retrieved evidence.")
                 recommendations.append(f"Reduce {bounce_col} through better landing-page relevance and clearer product discovery.")
 
@@ -224,7 +258,7 @@ class LLMClient:
                 pos_avg = self._avg(positives, value_col) if positives else None
                 neg_avg = self._avg(negatives, value_col) if negatives else None
                 if pos_avg is not None and neg_avg is not None:
-                    insights.append(f"{value_col} is higher in stronger rows ({pos_avg:.2f}) than in weaker rows ({neg_avg:.2f}).")
+                    insights.append(maybe_add_keyword("higher engagement", f"{value_col} is higher in stronger rows ({pos_avg:.2f}) than in weaker rows ({neg_avg:.2f})."))
                     patterns.append(f"Higher {value_col} appears alongside stronger commercial intent.")
                 recommendations.append(f"Use {value_col} as a signal for identifying high-intent traffic and pages.")
 
@@ -242,12 +276,29 @@ class LLMClient:
             if column and (label not in summary_topics):
                 summary_topics.append(label)
         if summary_topics:
-            summary = f"For this question, the strongest signals in the retrieved context come from {' ,'.join(summary_topics[:3])}."
+            connector = ", ".join(summary_topics[:3])
+            if prompt_profile["tone"] == "executive":
+                summary = f"Executive read: the clearest performance signals for this question come from {connector}."
+            elif prompt_profile["tone"] == "evidence":
+                summary = f"Based strictly on retrieved evidence, the strongest observable signals come from {connector}."
+            else:
+                summary = f"For this question, the strongest signals in the retrieved context come from {connector}."
+
+        if prompt_profile["strict_grounding"] and not rows:
+            recommendations = ["Insufficient retrieved evidence to support a confident recommendation."]
+            confidence = "low"
+
+        if model_profile["risk"] == "cautious" and recommendations:
+            recommendations[-1] = "Validate the pattern with a wider dataset slice before scaling decisions."
+        elif model_profile["risk"] == "analytical" and patterns:
+            patterns.append("This pattern should be compared across additional segments before final prioritization.")
+        elif model_profile["risk"] == "concise":
+            summary = summary.replace("the strongest", "the clearest")
 
         return {
             "summary": summary,
-            "key_insights": insights[:3],
-            "patterns": patterns[:3] or ["The retrieved records show a directional pattern but not enough evidence for a broader claim."],
-            "recommendations": recommendations[:3],
+            "key_insights": insights[: max(1, min(model_profile["detail"], 3))],
+            "patterns": (patterns[: prompt_profile["patterns"]] or ["The retrieved records show a directional pattern but not enough evidence for a broader claim."]),
+            "recommendations": recommendations[: prompt_profile["recommendations"]],
             "confidence": confidence if rows else "low",
         }

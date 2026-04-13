@@ -82,6 +82,9 @@ class AnalystRAGAgent:
         return f"""
 {instruction}
 
+Prompt style:
+{prompt_style}
+
 Question:
 {question}
 
