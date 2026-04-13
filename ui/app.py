@@ -22,6 +22,7 @@ QUESTIONS_PATH = BASE_DIR / "data" / "evaluation_questions.json"
 OUTPUT_DIR = BASE_DIR / "outputs"
 UPLOAD_DIR = OUTPUT_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_ANALYSIS_ROWS = 25_000
 
 SAMPLE_QUESTIONS = [
     "Which customer segments should we prioritize?",
@@ -360,6 +361,7 @@ def ensure_defaults() -> None:
     defaults: dict[str, Any] = {
         "ds_path": str(DEFAULT_DATASET_PATH),
         "ds_name": DEFAULT_DATASET_PATH.name,
+        "sampling_info": None,
         "question": SAMPLE_QUESTIONS[0],
         "analyst_result": None,
         "ppt_path": None,
@@ -482,10 +484,16 @@ def render_sidebar(dataset: pd.DataFrame, dataset_name: str) -> None:
             f'<div class="sb-row"><span>Columns</span><span>{len(dataset.columns)}</span></div>',
             unsafe_allow_html=True,
         )
+        sampling_info = st.session_state.get("sampling_info")
+        if sampling_info and sampling_info.get("sampled"):
+            st.caption(
+                f"Sampled {sampling_info['analysis_rows']:,} of {sampling_info['source_rows']:,} uploaded rows for analysis."
+            )
         gap()
         if st.button("Reset to default dataset", use_container_width=True):
             st.session_state["ds_path"] = str(DEFAULT_DATASET_PATH)
             st.session_state["ds_name"] = DEFAULT_DATASET_PATH.name
+            st.session_state["sampling_info"] = None
             reset_derived_state()
             rerun()
         st.markdown("---")
@@ -498,6 +506,12 @@ def render_sidebar(dataset: pd.DataFrame, dataset_name: str) -> None:
 def render_topbar(dataset_name: str, dataset: pd.DataFrame) -> None:
     is_custom = dataset_name != DEFAULT_DATASET_PATH.name
     pill_cls = "pill hi" if is_custom else "pill"
+    sampling_info = st.session_state.get("sampling_info")
+    sampling_pill = (
+        f'<span class="pill">Sampled {sampling_info["analysis_rows"]:,}/{sampling_info["source_rows"]:,} rows</span>'
+        if sampling_info and sampling_info.get("sampled")
+        else ""
+    )
     st.markdown(
         f"""
         <div class="topbar">
@@ -511,6 +525,7 @@ def render_topbar(dataset_name: str, dataset: pd.DataFrame) -> None:
                 <span class="{pill_cls}">{dataset_name}</span>
                 <span class="pill">{len(dataset):,} rows</span>
                 <span class="pill">{len(dataset.columns)} columns</span>
+                {sampling_pill}
             </div>
         </div>
         """,
@@ -532,18 +547,30 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
     st.markdown('<div class="upload-zone">', unsafe_allow_html=True)
     st.markdown(
         '<div class="upload-zone-title">&#8593; Drag & drop a CSV file</div>'
-        '<div class="upload-zone-sub">Ecommerce session data, customer data, or any tabular CSV with a target column</div>',
+        '<div class="upload-zone-sub">Ecommerce session data, customer data, or any tabular CSV with a target column. Large files are automatically sampled for faster analysis.</div>',
         unsafe_allow_html=True,
     )
     uploaded = st.file_uploader("", type=["csv"], label_visibility="collapsed")
     st.markdown("</div>", unsafe_allow_html=True)
 
     if uploaded is not None:
+        uploaded_df = pd.read_csv(uploaded)
+        source_rows = len(uploaded_df)
+        sampled = source_rows > MAX_ANALYSIS_ROWS
+        analysis_df = (
+            uploaded_df.sample(n=MAX_ANALYSIS_ROWS, random_state=42).reset_index(drop=True)
+            if sampled else uploaded_df
+        )
         saved = UPLOAD_DIR / uploaded.name
-        saved.write_bytes(uploaded.getbuffer())
+        analysis_df.to_csv(saved, index=False)
         if st.session_state["ds_path"] != str(saved):
             st.session_state["ds_path"] = str(saved)
             st.session_state["ds_name"] = uploaded.name
+            st.session_state["sampling_info"] = {
+                "sampled": sampled,
+                "source_rows": source_rows,
+                "analysis_rows": len(analysis_df),
+            }
             reset_derived_state()
             rerun()
 
@@ -552,10 +579,19 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
     # ── Key metrics ──────────────────────────
     section_header("Dataset at a glance")
     cols = st.columns(4)
-    with cols[0]: metric_card("Rows", f"{summary['rows']:,}", "Total records")
+    sampling_info = st.session_state.get("sampling_info")
+    row_label = "Source Rows" if sampling_info and sampling_info.get("sampled") else "Rows"
+    row_caption = "Uploaded file size" if sampling_info and sampling_info.get("sampled") else "Total records"
+    row_value = sampling_info["source_rows"] if sampling_info and sampling_info.get("sampled") else summary["rows"]
+    with cols[0]: metric_card(row_label, f"{row_value:,}", row_caption)
     with cols[1]: metric_card("Columns", str(summary["columns"]), "Available fields")
     with cols[2]: metric_card("Outcome Rate", rate, "Detected conversion rate")
-    with cols[3]: metric_card("Top Segment", str(summary["top_customer"]), "Best-performing group")
+    with cols[3]:
+        metric_card(
+            "Analysis Grain" if sampling_info and sampling_info.get("sampled") else "Top Segment",
+            f"{summary.get('analysis_rows', len(dataset)):,} {summary.get('analysis_grain', 'rows')}" if sampling_info and sampling_info.get("sampled") else str(summary["top_customer"]),
+            "Normalized records used" if sampling_info and sampling_info.get("sampled") else "Best-performing group",
+        )
 
     gap()
 
@@ -592,6 +628,10 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
             "</div>",
             unsafe_allow_html=True,
         )
+        if sampling_info and sampling_info.get("sampled"):
+            st.info(
+                f"Large upload detected. The app is analyzing a {sampling_info['analysis_rows']:,}-row sample from the original {sampling_info['source_rows']:,}-row file."
+            )
 
     gap()
 

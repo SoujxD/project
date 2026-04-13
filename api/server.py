@@ -68,16 +68,18 @@ async def summarize_dataset(file: UploadFile = File(...)) -> dict:
     dataset = _validate_csv(upload_path)
     presenter = PresentationGeneratorAgent(output_dir=OUTPUT_DIR)
     summary = presenter.summarize_dataset(upload_path)
-    schema = presenter.infer_schema(dataset)
     return {
         "dataset_name": file.filename,
         "rows": summary["rows"],
         "columns": summary["columns"],
+        "analysis_rows": summary["analysis_rows"],
+        "analysis_grain": summary["analysis_grain"],
+        "source_format": summary["source_format"],
         "target_rate": summary["target_rate"],
         "top_time": summary["top_time"],
         "top_customer": summary["top_customer"],
         "top_channel": summary["top_channel"],
-        "schema": schema,
+        "schema": summary["schema"],
         "preview": dataset.head(12).fillna("").to_dict(orient="records"),
     }
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from utils.dataset_adapter import load_analysis_dataset
 from utils.llm_client import LLMClient
 from utils.parser import extract_json
 from utils.retriever import EcommerceRetriever, RetrievalResult
@@ -65,7 +66,8 @@ class AnalystRAGAgent:
         models: list[str] | None = None,
     ) -> None:
         self.dataset_path = Path(dataset_path)
-        self.dataframe = pd.read_csv(self.dataset_path)
+        adapted = load_analysis_dataset(self.dataset_path)
+        self.dataframe = adapted.dataframe
         self.retriever = EcommerceRetriever(self.dataframe)
         self.llm_client = llm_client or LLMClient()
         self.models = models or DEFAULT_MODELS

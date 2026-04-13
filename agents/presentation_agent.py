@@ -16,6 +16,8 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
+from utils.dataset_adapter import load_analysis_dataset
+
 
 @dataclass(slots=True)
 class SlideContent:
@@ -91,17 +93,17 @@ class PresentationGeneratorAgent:
         time_col = self._find_column(dataset, ["month", "date", "week", "season", "day", "period"])
         customer_col = self._find_column(
             dataset,
-            ["visitor", "customer", "segment", "user_type", "member", "cohort", "device", "browser"],
+            ["visitor", "customer", "segment", "user_type", "member", "cohort", "device", "browser", "brand", "category"],
             exclude={time_col} if time_col else set(),
         )
         channel_col = self._find_column(
             dataset,
-            ["traffic", "channel", "source", "campaign", "medium", "acquisition", "referrer"],
+            ["traffic", "channel", "source", "campaign", "medium", "acquisition", "referrer", "category", "brand"],
             exclude={time_col, customer_col} - {None},
         )
         engagement_col = self._find_column(
             dataset,
-            ["pagevalue", "page_value", "pagevalues", "basket", "cart", "duration", "session", "product", "engagement"],
+            ["pagevalue", "page_value", "pagevalues", "basket", "cart", "duration", "session", "product", "engagement", "event_count", "avg_price", "price"],
             exclude={time_col, customer_col, channel_col} - {None},
         )
         friction_col = self._find_column(
@@ -178,7 +180,8 @@ class PresentationGeneratorAgent:
         return "Conversion Rate" if has_target else "Share / Count"
 
     def summarize_dataset(self, dataset_path: str | Path) -> dict[str, object]:
-        dataset = pd.read_csv(dataset_path)
+        adapted = load_analysis_dataset(dataset_path)
+        dataset = adapted.dataframe
         schema = self.infer_schema(dataset)
         target_metric = self._target_metric(dataset, schema)
         time_series = self._series_by_dimension(dataset, schema, schema["time"])
@@ -214,8 +217,11 @@ class PresentationGeneratorAgent:
         return {
             "dataset": dataset,
             "schema": schema,
-            "rows": len(dataset),
+            "rows": adapted.raw_rows,
             "columns": len(dataset.columns),
+            "analysis_rows": adapted.analysis_rows,
+            "analysis_grain": adapted.analysis_grain,
+            "source_format": adapted.source_format,
             "target_rate": target_rate,
             "top_time": top_time,
             "top_customer": top_customer,
@@ -226,7 +232,7 @@ class PresentationGeneratorAgent:
         }
 
     def generate_charts(self, dataset_path: str | Path) -> dict[str, Path]:
-        dataset = pd.read_csv(dataset_path)
+        dataset = load_analysis_dataset(dataset_path).dataframe
         schema = self.infer_schema(dataset)
         has_target = self._target_metric(dataset, schema) is not None
         ylabel = self._format_metric_label(schema, has_target)
@@ -308,7 +314,10 @@ class PresentationGeneratorAgent:
                 title="E-Commerce Customer Behavior Insights",
                 bullets=[
                     "This presentation summarizes the uploaded ecommerce dataset in a stakeholder-friendly format.",
-                    f"The dataset includes {summary['rows']} rows and {summary['columns']} columns of customer, channel, and behavioral information.",
+                    (
+                        f"The uploaded file contains {summary['rows']} rows and is analyzed at the "
+                        f"{summary['analysis_grain']} level across {summary['analysis_rows']} records."
+                    ),
                     target_text,
                 ],
                 speaker_notes="Introduce the dataset story and frame the deck as a business-ready summary of customer behavior patterns.",

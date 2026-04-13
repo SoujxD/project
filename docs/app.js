@@ -7,10 +7,12 @@ const SAMPLE_QUESTIONS = [
 
 const STORAGE_KEYS = {
   csv: "ise547_dataset_csv",
-  name: "ise547_dataset_name"
+  name: "ise547_dataset_name",
+  sampling: "ise547_dataset_sampling"
 };
 
 const API_BASE_URL = (window.APP_CONFIG?.API_BASE_URL || "").replace(/\/$/, "");
+const MAX_ANALYSIS_ROWS = 25000;
 
 function hasBackend() {
   return Boolean(API_BASE_URL);
@@ -29,6 +31,11 @@ async function loadDefaultDataset() {
   const text = await response.text();
   localStorage.setItem(STORAGE_KEYS.csv, text);
   localStorage.setItem(STORAGE_KEYS.name, "default_dataset.csv");
+  localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify({
+    sampled: false,
+    sourceRows: parseCsvText(text).data.length,
+    analysisRows: parseCsvText(text).data.length
+  }));
   return parseCsvText(text).data;
 }
 
@@ -46,9 +53,33 @@ function getDatasetName() {
   return localStorage.getItem(STORAGE_KEYS.name) || "default_dataset.csv";
 }
 
-function saveDataset(fileName, csvText) {
+function getSamplingInfo() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.sampling) || "null");
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveDataset(fileName, csvText, samplingInfo = null) {
   localStorage.setItem(STORAGE_KEYS.csv, csvText);
   localStorage.setItem(STORAGE_KEYS.name, fileName);
+  if (samplingInfo) {
+    localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify(samplingInfo));
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.sampling);
+  }
+}
+
+function sampleRows(rows, limit = MAX_ANALYSIS_ROWS) {
+  if (rows.length <= limit) return rows;
+  const sampled = [];
+  const step = rows.length / limit;
+  for (let i = 0; i < limit; i += 1) {
+    const index = Math.min(rows.length - 1, Math.floor(i * step));
+    sampled.push(rows[index]);
+  }
+  return sampled;
 }
 
 function makeFormData(extraFields = {}) {
@@ -243,12 +274,22 @@ function renderTopbar(page) {
 function bindUploader() {
   const input = document.getElementById("datasetUpload");
   if (!input) return;
-  input.addEventListener("change", (event) => {
+  input.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      saveDataset(file.name, reader.result);
+    reader.onload = async () => {
+      const rawText = String(reader.result || "");
+      const parsed = parseCsvText(rawText);
+      const rows = parsed.data || [];
+      const sampledRows = sampleRows(rows);
+      const samplingInfo = {
+        sampled: rows.length > sampledRows.length,
+        sourceRows: rows.length,
+        analysisRows: sampledRows.length
+      };
+      const csvToStore = samplingInfo.sampled ? Papa.unparse(sampledRows) : rawText;
+      saveDataset(file.name, csvToStore, samplingInfo);
       window.location.reload();
     };
     reader.readAsText(file);
@@ -258,10 +299,17 @@ function bindUploader() {
 function renderUploadCard(summary) {
   const host = document.getElementById("uploadCard");
   if (!host) return;
+  const samplingInfo = getSamplingInfo();
+  const analysisTag = summary.analysis_rows && summary.analysis_grain
+    ? `<span class="tag">Analysis: ${Number(summary.analysis_rows).toLocaleString()} ${summary.analysis_grain}</span>`
+    : "";
+  const sampledTag = samplingInfo?.sampled
+    ? `<span class="tag">Sampled: ${Number(samplingInfo.analysisRows).toLocaleString()} of ${Number(samplingInfo.sourceRows).toLocaleString()} rows</span>`
+    : "";
   host.innerHTML = `
     <div class="upload-card fade-in">
       <div class="section-title">Active dataset</div>
-      <div class="section-subtitle">Upload a customer, session, or ecommerce performance CSV to power all tabs.</div>
+      <div class="section-subtitle">Upload a customer, session, or ecommerce performance CSV to power all tabs. Large files are sampled automatically for responsive analysis.</div>
       <div class="upload-row">
         <input id="datasetUpload" type="file" accept=".csv" />
         <a class="button-link secondary" href="./assets/default_dataset.csv" download>Download sample</a>
@@ -271,6 +319,8 @@ function renderUploadCard(summary) {
         <span class="tag">Dataset: ${getDatasetName()}</span>
         <span class="tag">Rows: ${summary.rows}</span>
         <span class="tag">Columns: ${summary.columns}</span>
+        ${analysisTag}
+        ${sampledTag}
         <span class="tag">Outcome: ${summary.schema?.target || "Not detected"}</span>
       </div>
     </div>
@@ -279,6 +329,7 @@ function renderUploadCard(summary) {
   document.getElementById("resetDatasetButton")?.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEYS.csv);
     localStorage.removeItem(STORAGE_KEYS.name);
+    localStorage.removeItem(STORAGE_KEYS.sampling);
     window.location.reload();
   });
 }
@@ -360,7 +411,11 @@ async function renderOverviewPage(rows) {
     metricCard("Rows", summary.rows.toLocaleString(), "Records in the active dataset"),
     metricCard("Columns", summary.columns, "Available fields"),
     metricCard("Outcome Rate", summary.target_rate !== null && summary.target_rate !== undefined ? `${(summary.target_rate * 100).toFixed(1)}%` : "N/A", "Detected conversion or purchase rate"),
-    metricCard("Top Segment", summary.top_customer, "Best-performing customer grouping")
+    metricCard(
+      summary.analysis_grain ? "Analysis Grain" : "Top Segment",
+      summary.analysis_grain ? `${summary.analysis_rows?.toLocaleString?.() || summary.analysis_rows} ${summary.analysis_grain}` : summary.top_customer,
+      summary.analysis_grain ? "Normalized records used for analysis" : "Best-performing customer grouping"
+    )
   ].join("");
   document.getElementById("overviewContent").innerHTML = `
     <div class="grid-main">
@@ -368,6 +423,7 @@ async function renderOverviewPage(rows) {
         <div class="section-title">Detected schema</div>
         <p>Fields automatically inferred from the active dataset.</p>
         <ul>
+          <li>Source format: <strong>${summary.source_format || "tabular"}</strong></li>
           <li>Outcome column: <strong>${summary.schema?.target || "Not detected"}</strong></li>
           <li>Customer grouping: <strong>${summary.schema?.customer || "Not detected"}</strong></li>
           <li>Channel grouping: <strong>${summary.schema?.channel || "Not detected"}</strong></li>
@@ -377,6 +433,7 @@ async function renderOverviewPage(rows) {
       <div class="card fade-in" style="animation-delay:0.07s">
         <div class="section-title">Quick summary</div>
         <ul>
+          ${getSamplingInfo()?.sampled ? `<li>Large upload sampled to <strong>${Number(getSamplingInfo().analysisRows).toLocaleString()}</strong> rows from <strong>${Number(getSamplingInfo().sourceRows).toLocaleString()}</strong>.</li>` : ""}
           <li>Best time period: <strong>${summary.top_time}</strong></li>
           <li>Best channel: <strong>${summary.top_channel}</strong></li>
           <li>Best segment: <strong>${summary.top_customer}</strong></li>

@@ -206,6 +206,8 @@ class LLMClient:
         time_col = self._find_column(rows, ["month", "date", "week", "season", "day"])
         bounce_col = self._find_column(rows, ["bounce", "exit", "friction"])
         value_col = self._find_column(rows, ["page value", "pagevalue", "duration", "product", "cart", "basket"])
+        category_col = self._find_column(rows, ["category", "department"])
+        brand_col = self._find_column(rows, ["brand"])
 
         positives = []
         negatives = []
@@ -244,6 +246,17 @@ class LLMClient:
                 insights.append(maybe_add_keyword("seasonality", f"{time_col} {best_time} appears most frequently among the stronger retrieved rows."))
                 patterns.append(f"Performance may vary meaningfully across {time_col.lower()} groupings.")
 
+        if any(term in q for term in ["category", "categories", "product", "products", "brand", "brands", "merchandise"]):
+            if category_col:
+                best_category = self._mode(positives or rows, category_col)
+                insights.append(maybe_add_keyword("category mix", f"{category_col} {best_category} appears most often in the stronger retrieved records."))
+                recommendations.append(f"Prioritize assortment, merchandising, and promotion around {best_category}.")
+            if brand_col:
+                best_brand = self._mode(positives or rows, brand_col)
+                insights.append(maybe_add_keyword("brand concentration", f"{brand_col} {best_brand} appears repeatedly in the higher-intent retrieved rows."))
+                patterns.append(f"{brand_col} concentration may be shaping commercial performance in this slice of evidence.")
+                recommendations.append(f"Test deeper placement and pricing support for {best_brand}.")
+
         if any(term in q for term in ["bounce", "exit", "friction", "drop"]):
             if bounce_col:
                 pos_avg = self._avg(positives, bounce_col) if positives else None
@@ -272,7 +285,13 @@ class LLMClient:
             patterns.append("The answer should be interpreted as a directional read from the top retrieved rows rather than a full-dataset estimate.")
 
         summary_topics = []
-        for label, column in [("customer segments", customer_col), ("channels", channel_col), ("time periods", time_col), ("behavior signals", value_col or bounce_col)]:
+        for label, column in [
+            ("customer segments", customer_col),
+            ("channels", channel_col),
+            ("time periods", time_col),
+            ("category and brand signals", category_col or brand_col),
+            ("behavior signals", value_col or bounce_col),
+        ]:
             if column and (label not in summary_topics):
                 summary_topics.append(label)
         if summary_topics:

@@ -102,10 +102,40 @@ class EcommerceRetriever:
 
         self.backend = "token_overlap"
 
+    def _expand_query(self, query: str) -> str:
+        """Expand user phrasing toward common ecommerce schema variants."""
+        lowered = query.lower()
+        expansions = []
+        synonym_map = {
+            "purchase": "purchased purchase_count conversion revenue",
+            "purchases": "purchased purchase_count conversion revenue",
+            "buy": "purchased purchase_count conversion order",
+            "sales": "purchased revenue conversion",
+            "brand": "dominant_brand brand",
+            "brands": "dominant_brand brand",
+            "category": "dominant_category category",
+            "categories": "dominant_category category",
+            "product": "product unique_products dominant_category dominant_brand",
+            "products": "product unique_products dominant_category dominant_brand",
+            "customer": "customer segment user visitor dominant_brand dominant_category",
+            "customers": "customer segment user visitor dominant_brand dominant_category",
+            "channel": "channel source traffic dominant_category dominant_brand",
+            "time": "event_month event_date time month",
+            "month": "event_month month event_date",
+            "cart": "cart_count basket",
+            "engagement": "event_count cart_count unique_products avg_price",
+        }
+        for token, expansion in synonym_map.items():
+            if token in lowered:
+                expansions.append(expansion)
+        return f"{query} {' '.join(expansions)}".strip()
+
     def retrieve(self, query: str, top_k: int = 5) -> list[RetrievalResult]:
         """Return the top matching dataset rows for the query."""
+        expanded_query = self._expand_query(query)
+        purchase_intent = any(term in expanded_query.lower() for term in ["purchase", "purchased", "conversion", "revenue", "order"])
         if self.backend == "faiss" and self.embedding_model is not None and self.faiss_index is not None:
-            query_embedding = np.asarray(self.embedding_model.encode([query]), dtype="float32")
+            query_embedding = np.asarray(self.embedding_model.encode([expanded_query]), dtype="float32")
             faiss.normalize_L2(query_embedding)
             scores, indices = self.faiss_index.search(query_embedding, top_k)
             return [
@@ -114,18 +144,24 @@ class EcommerceRetriever:
             ]
 
         if self.backend == "tfidf":
-            query_vector = self.vectorizer.transform([query])
+            query_vector = self.vectorizer.transform([expanded_query])
             similarities = cosine_similarity(query_vector, self.tfidf_matrix)[0]
             top_indices = np.argsort(similarities)[::-1][:top_k]
         else:
-            query_tokens = {token.lower() for token in query.split() if token.strip()}
+            query_tokens = {token.lower() for token in expanded_query.split() if token.strip()}
             similarities = []
             for document in self.documents:
                 doc_tokens = {token.lower().strip(",.:") for token in document.split() if token.strip()}
                 denominator = max(len(query_tokens | doc_tokens), 1)
                 similarities.append(len(query_tokens & doc_tokens) / denominator)
             similarities = np.asarray(similarities)
-            top_indices = np.argsort(similarities)[::-1][:top_k]
+        if purchase_intent:
+            for candidate in ["purchased", "purchase_count", "revenue", "conversion", "converted"]:
+                if candidate in self.dataframe.columns:
+                    boost = pd.to_numeric(self.dataframe[candidate], errors="coerce").fillna(0).to_numpy(dtype=float)
+                    similarities = similarities + (0.15 * np.clip(boost, 0, 1))
+                    break
+        top_indices = np.argsort(similarities)[::-1][:top_k]
         return [
             RetrievalResult(rank=rank + 1, score=float(similarities[idx]), text=self.documents[idx], row_index=int(idx))
             for rank, idx in enumerate(top_indices)
