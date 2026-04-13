@@ -600,26 +600,84 @@ async function renderPresentationPage(rows) {
 
   if (!slides) {
     const summary = await getSummary(rows);
+    const rateText = summary.target_rate !== null && summary.target_rate !== undefined
+      ? `${(summary.target_rate * 100).toFixed(1)}% detected outcome rate`
+      : "Outcome rate not detected";
     slides = [
       {
         title: "E-Commerce Customer Behavior Insights",
-        speaker_notes: "High-level overview of the dataset and outcome rate.",
+        speaker_notes: "Introduce the dataset story and frame the deck as a business-ready summary of customer behavior patterns.",
         bullets: [
-          `${summary.rows.toLocaleString()} records analyzed`,
-          `Detected outcome rate: ${summary.target_rate !== null && summary.target_rate !== undefined ? `${(summary.target_rate * 100).toFixed(1)}%` : "N/A"}`,
-          `Top customer segment: ${summary.top_customer}`
+          "This presentation summarizes the uploaded ecommerce dataset in a stakeholder-friendly format.",
+          `The dataset includes ${summary.rows.toLocaleString()} rows and ${summary.columns} columns of customer, channel, and behavioral information.`,
+          rateText + "."
+        ],
+        chart_url: null
+      },
+      {
+        title: "Dataset Snapshot",
+        speaker_notes: "Explain how the uploaded dataset was interpreted and which fields drove the analysis.",
+        bullets: [
+          "The dataset has been automatically profiled to detect customer segments, channel information, and business outcomes.",
+          `Peak performance currently appears in ${summary.top_time}.`,
+          `Most informative customer grouping detected: ${summary.schema?.customer || "not clearly available"}.`,
+          `Most informative acquisition grouping detected: ${summary.schema?.channel || "not clearly available"}.`
         ],
         chart_url: "./assets/time_performance.png"
       },
       {
-        title: "Target Customers & Channels",
-        speaker_notes: "Customer and channel groupings inferred from the dataset.",
+        title: "Target Customers",
+        speaker_notes: "Highlight which customers appear most valuable and where acquisition quality is strongest.",
         bullets: [
-          `Top customer grouping: ${summary.top_customer}`,
-          `Top channel grouping: ${summary.top_channel}`,
-          "Use these segments to guide campaign prioritization and messaging."
+          `The strongest customer segment is ${summary.top_customer}.`,
+          `The strongest acquisition or channel grouping is ${summary.top_channel}.`,
+          "Priority audiences combine stronger conversion signals with stronger engagement behavior.",
+          "These segments are the best candidates for campaign prioritization and personalized targeting."
         ],
         chart_url: "./assets/customer_performance.png"
+      },
+      {
+        title: "Behavioral Patterns",
+        speaker_notes: "Use this slide to explain the behavioral signals that separate stronger sessions from weaker ones.",
+        bullets: [
+          `Engagement metric detected: ${summary.schema?.engagement || "not clearly available"}.`,
+          `Friction metric detected: ${summary.schema?.friction || "not clearly available"}.`,
+          "Bucket analysis shows where commercial performance improves across engagement quartiles.",
+          "Behavior and customer quality are working together rather than independently."
+        ],
+        chart_url: "./assets/engagement_buckets.png"
+      },
+      {
+        title: "Key Findings",
+        speaker_notes: "Condense the analysis into the most portable executive findings.",
+        bullets: [
+          `Top time period: ${summary.top_time}.`,
+          `Top customer segment: ${summary.top_customer}.`,
+          `Top channel grouping: ${summary.top_channel}.`,
+          "The dataset suggests that acquisition quality and on-site engagement both influence business outcomes."
+        ],
+        chart_url: "./assets/channel_performance.png"
+      },
+      {
+        title: "Recommendations",
+        speaker_notes: "Translate the patterns into actions across marketing, merchandising, and experience optimization.",
+        bullets: [
+          "Focus budget on the strongest channels and customer groups identified in the analysis.",
+          "Improve weak customer journeys by reducing friction and strengthening discovery paths.",
+          "Use high-intent engagement signals to trigger tailored offers, retention flows, or remarketing.",
+          "Track the same dimensions over time to validate whether conversion improves after changes."
+        ],
+        chart_url: null
+      },
+      {
+        title: "Conclusion",
+        speaker_notes: "Close by emphasizing speed, clarity, and repeatability for future ecommerce datasets.",
+        bullets: [
+          "The uploaded ecommerce dataset can be turned into a clear commercial story without manual chart building.",
+          "Target segments, channel quality, and engagement behavior are the main drivers surfaced by the analysis.",
+          "This workflow is designed to help analysts move quickly from raw data to presentation-ready outputs."
+        ],
+        chart_url: null
       }
     ];
   }
