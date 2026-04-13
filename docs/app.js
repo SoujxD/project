@@ -264,6 +264,85 @@ function summarizeRows(rows) {
   };
 }
 
+function missingSummary(rows) {
+  if (!rows.length) return [];
+  const columns = Object.keys(rows[0]);
+  return columns
+    .map((column) => {
+      const missing = rows.filter((row) => row[column] === null || row[column] === undefined || row[column] === "").length;
+      return { column, missing_pct: Number(((missing / Math.max(rows.length, 1)) * 100).toFixed(2)) };
+    })
+    .sort((a, b) => b.missing_pct - a.missing_pct)
+    .slice(0, 12);
+}
+
+function buildEdaFallback(rows) {
+  const summary = summarizeRows(rows);
+  const missing = missingSummary(rows);
+  const warnings = summary.schema?.target
+    ? ["Browser fallback mode is active, so advanced backend EDA diagnostics are limited."]
+    : ["No clean target column was detected in browser fallback mode."];
+  const suggestedQuestions = [];
+  if (summary.schema?.customer) suggestedQuestions.push(`Which ${summary.schema.customer} groups should we prioritize?`);
+  if (summary.schema?.channel) suggestedQuestions.push(`Which ${summary.schema.channel} groups appear strongest?`);
+  if (summary.schema?.time) suggestedQuestions.push(`How does performance change across ${summary.schema.time}?`);
+  if (summary.schema?.engagement) suggestedQuestions.push(`How does ${summary.schema.engagement} relate to the detected outcome?`);
+  if (!suggestedQuestions.length) suggestedQuestions.push("Which dimensions in this dataset appear most commercially meaningful?");
+  return {
+    profile: {
+      source_format: "tabular",
+      analysis_grain: "rows",
+      raw_rows: summary.rows,
+      analysis_rows: summary.rows,
+      columns: summary.columns,
+      schema: summary.schema,
+      target_rate: summary.targetRate,
+      top_time: summary.topTime,
+      top_customer: summary.topCustomer,
+      top_channel: summary.topChannel,
+      top_product_dimension: "Unavailable",
+      numeric_columns: []
+    },
+    quality_checks: {
+      duplicate_rows: 0,
+      missing_summary: missing,
+      null_heavy_columns: missing.filter((row) => row.missing_pct > 20),
+      constant_columns: [],
+      high_cardinality_columns: [],
+      numeric_outliers: [],
+      warnings
+    },
+    chart_manifest: [],
+    suggested_questions: suggestedQuestions,
+    handoff_summary: {
+      dataset_type: "tabular",
+      analysis_grain: "rows",
+      target_column: summary.schema?.target || null,
+      time_column: summary.schema?.time || null,
+      customer_dimensions: summary.schema?.customer ? [summary.schema.customer] : [],
+      channel_dimensions: summary.schema?.channel ? [summary.schema.channel] : [],
+      engagement_metric: summary.schema?.engagement || null,
+      friction_metric: summary.schema?.friction || null,
+      quality_warnings: warnings,
+      top_patterns: [
+        `Top customer grouping: ${summary.topCustomer}.`,
+        `Top channel grouping: ${summary.topChannel}.`,
+        `Top time grouping: ${summary.topTime}.`
+      ],
+      recommended_questions: suggestedQuestions
+    },
+    retrieval_chunks: [
+      `Browser fallback EDA profile: rows=${summary.rows}, columns=${summary.columns}.`,
+      `Detected schema: target=${summary.schema?.target || "none"}, customer=${summary.schema?.customer || "none"}, channel=${summary.schema?.channel || "none"}, time=${summary.schema?.time || "none"}.`
+    ],
+    key_findings: [
+      summary.targetRate !== null ? `Detected outcome rate is ${(summary.targetRate * 100).toFixed(1)}%.` : "No clear outcome rate detected.",
+      `Top customer grouping: ${summary.topCustomer}.`,
+      `Top channel grouping: ${summary.topChannel}.`
+    ]
+  };
+}
+
 async function getSummary(rows) {
   if (hasBackend() && getStoredCsv()) {
     try {
@@ -290,6 +369,7 @@ async function getSummary(rows) {
 function renderTopbar(page) {
   const nav = [
     ["index.html", "Overview"],
+    ["eda.html", "EDA"],
     ["analyst.html", "Analyst Demo"],
     ["evaluation.html", "Evaluation"],
     ["presentation.html", "Presentation"]
@@ -419,6 +499,11 @@ function renderBarList(items, formatter = (v) => v.toFixed(2)) {
       <div class="bar-head"><span>${item.key}</span><strong>${formatter(item.value)}</strong></div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, item.value * 100)}%"></div></div>
     </div>`).join("")}</div>`;
+}
+
+function renderBulletList(items, emptyText = "No items available.") {
+  if (!items || !items.length) return `<p class="muted">${emptyText}</p>`;
+  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
 }
 
 function retrieveContext(rows, question, topK = 5) {
@@ -677,6 +762,100 @@ async function renderAnalystPage(rows) {
   run();
 }
 
+async function renderEdaPage(rows) {
+  let report;
+  if (hasBackend() && getStoredCsv()) {
+    try {
+      report = await fetchApi("/api/eda", { method: "POST", body: makeFormData() });
+      report.chart_manifest = (report.chart_manifest || []).map((chart) => ({
+        ...chart,
+        chart_url: chart.chart_url ? `${API_BASE_URL}${chart.chart_url}` : null
+      }));
+    } catch (error) {
+      console.warn("Backend EDA call failed, falling back to browser mode.", error);
+    }
+  }
+  if (!report) report = buildEdaFallback(rows);
+
+  const profile = report.profile || {};
+  const quality = report.quality_checks || {};
+  const schema = profile.schema || {};
+  const missingRows = (quality.missing_summary || []).slice(0, 8);
+
+  document.getElementById("edaPage").innerHTML = `
+    <div class="grid-4 fade-in">
+      ${metricCard("Source Format", profile.source_format || "Unknown", "Detected dataset structure")}
+      ${metricCard("Analysis Grain", `${profile.analysis_rows?.toLocaleString?.() || profile.analysis_rows || 0} ${profile.analysis_grain || "rows"}`, "Normalized records used for EDA")}
+      ${metricCard("Outcome Rate", profile.target_rate !== null && profile.target_rate !== undefined ? `${(profile.target_rate * 100).toFixed(1)}%` : "N/A", "Detected target or purchase rate")}
+      ${metricCard("Top Segment", profile.top_customer || "Unavailable", "Strongest detected grouping")}
+    </div>
+
+    <div class="grid-main" style="margin-top:18px;">
+      <div class="hero-card fade-in">
+        <div class="section-title">Dataset profile</div>
+        <p class="section-subtitle">Deterministic profiling runs before the analyst agent so the rest of the workflow operates from a cleaner business view.</p>
+        <ul>
+          <li>Source format: <strong>${profile.source_format || "Unknown"}</strong></li>
+          <li>Analysis grain: <strong>${profile.analysis_grain || "rows"}</strong></li>
+          <li>Target column: <strong>${schema.target || "Not detected"}</strong></li>
+          <li>Time column: <strong>${schema.time || "Not detected"}</strong></li>
+          <li>Customer grouping: <strong>${schema.customer || "Not detected"}</strong></li>
+          <li>Channel grouping: <strong>${schema.channel || "Not detected"}</strong></li>
+        </ul>
+      </div>
+      <div class="card fade-in" style="animation-delay:0.05s">
+        <div class="section-title">Suggested business questions</div>
+        <div class="section-subtitle">Questions generated from the detected schema and strongest patterns.</div>
+        ${renderBulletList(report.suggested_questions || [], "Suggested questions are unavailable for this dataset.")}
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:18px;">
+      <div class="card fade-in">
+        <div class="section-title">Quality checks</div>
+        <div class="section-subtitle">Key warnings and structural issues found before analysis.</div>
+        ${renderBulletList((quality.warnings || []).concat((quality.constant_columns || []).length ? [`Constant columns: ${(quality.constant_columns || []).join(", ")}`] : []))}
+      </div>
+      <div class="card fade-in" style="animation-delay:0.05s">
+        <div class="section-title">Missingness snapshot</div>
+        <div class="section-subtitle">Columns with the highest share of missing values.</div>
+        ${missingRows.length ? tableFromRows(missingRows) : "<p class='muted'>No major missingness issues detected.</p>"}
+      </div>
+    </div>
+
+    <div class="card fade-in" style="margin-top:18px;">
+      <div class="section-title">Auto-generated charts</div>
+      <div class="section-subtitle">These visuals are generated directly from the uploaded dataset before the analyst agent answers any question.</div>
+      <div class="slide-grid" style="margin-top:14px;">
+        ${(report.chart_manifest || []).length ? report.chart_manifest.map((chart, idx) => `
+          <div class="preview-card slide" style="animation-delay:${0.04 * idx}s">
+            <div>
+              <h3>${chart.title}</h3>
+              <p class="slide-notes">${chart.caption}</p>
+            </div>
+            <div class="preview-chart">
+              ${chart.chart_url ? `<img src="${chart.chart_url}" alt="${chart.title}" loading="lazy" />` : "<p class='muted small'>Backend chart unavailable in fallback mode.</p>"}
+            </div>
+          </div>
+        `).join("") : "<p class='muted'>Charts are unavailable in browser fallback mode.</p>"}
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:18px;">
+      <div class="card fade-in">
+        <div class="section-title">Key findings</div>
+        <div class="section-subtitle">Portable EDA insights the analyst and presentation agents can build on.</div>
+        ${renderBulletList(report.key_findings || [], "No findings available.")}
+      </div>
+      <div class="card fade-in" style="animation-delay:0.05s">
+        <div class="section-title">Handoff summary for analyst</div>
+        <div class="section-subtitle">Structured context passed into the analyst stage.</div>
+        <div class="response-section summary"><pre style="margin:0;white-space:pre-wrap;">${JSON.stringify(report.handoff_summary || {}, null, 2)}</pre></div>
+      </div>
+    </div>
+  `;
+}
+
 /* ── Evaluation page ── */
 async function fetchCsv(path) {
   const response = await fetch(path);
@@ -892,6 +1071,7 @@ async function init() {
   }
   const rows = await getDataset();
   if (page === "index.html") await renderOverviewPage(rows);
+  else if (page === "eda.html") await renderEdaPage(rows);
   else if (page === "analyst.html") await renderAnalystPage(rows);
   else if (page === "evaluation.html") await renderEvaluationPage();
   else if (page === "presentation.html") await renderPresentationPage(rows);

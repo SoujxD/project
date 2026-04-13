@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from agents.analyst_agent import AnalystRAGAgent
+from agents.eda_agent import EDAAgent
 from agents.presentation_agent import PresentationGeneratorAgent
 
 
@@ -111,6 +112,32 @@ async def analyst_answer(
         "parsed_response": result.parsed_response,
         "raw_response": result.raw_response,
         "retrieved_context": result.retrieved_context,
+    }
+
+
+@app.post("/api/eda")
+async def eda_report(file: UploadFile = File(...)) -> dict:
+    upload_path = _save_upload(file)
+    _validate_csv(upload_path)
+    report_id = uuid.uuid4().hex[:12]
+    eda_agent = EDAAgent(output_dir=OUTPUT_DIR)
+    report = eda_agent.analyze_dataset(upload_path, include_charts=True, chart_prefix=report_id)
+    return {
+        "dataset_name": file.filename,
+        "profile": report["profile"],
+        "quality_checks": report["quality_checks"],
+        "chart_manifest": [
+            {
+                **chart,
+                "chart_url": f"/api/downloads/{chart['filename']}",
+            }
+            for chart in report["chart_manifest"]
+        ],
+        "suggested_questions": report["suggested_questions"],
+        "handoff_summary": report["handoff_summary"],
+        "retrieval_chunks": report["retrieval_chunks"],
+        "key_findings": report["key_findings"],
+        "preview": report["preview"],
     }
 
 

@@ -13,6 +13,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from agents.analyst_agent import AnalystRAGAgent
+from agents.eda_agent import EDAAgent
 from agents.presentation_agent import PresentationGeneratorAgent
 from evaluation.evaluator import EvaluationPipeline
 
@@ -349,6 +350,17 @@ def build_presenter() -> PresentationGeneratorAgent:
     return PresentationGeneratorAgent(output_dir=OUTPUT_DIR)
 
 
+@st.cache_resource(show_spinner=False)
+def build_eda_agent() -> EDAAgent:
+    return EDAAgent(output_dir=OUTPUT_DIR)
+
+
+@st.cache_data(show_spinner=False)
+def build_eda_report(path: str, modified_at: float) -> dict[str, Any]:
+    del modified_at
+    return build_eda_agent().analyze_dataset(path, include_charts=True, chart_prefix=Path(path).stem.replace(" ", "_")[:24])
+
+
 def load_results() -> pd.DataFrame | None:
     p = OUTPUT_DIR / "results.csv"
     return pd.read_csv(p) if p.exists() else None
@@ -381,6 +393,11 @@ def get_active() -> tuple[pd.DataFrame, str, str, AnalystRAGAgent]:
     path = st.session_state["ds_path"]
     name = st.session_state["ds_name"]
     return load_dataset(path), name, path, build_agent(path)
+
+
+def get_eda_report(path: str) -> dict[str, Any]:
+    modified_at = Path(path).stat().st_mtime if Path(path).exists() else 0.0
+    return build_eda_report(path, modified_at)
 
 
 def reset_derived_state() -> None:
@@ -619,6 +636,7 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
             "<p style='margin:0 0 0.6rem;font-size:0.88rem;color:var(--muted);'>Use the tabs above to move through each step:</p>"
             "<ol style='margin:0;padding-left:1.2rem;font-size:0.9rem;line-height:2;color:#163747;'>"
             "<li>Upload a CSV on this page</li>"
+            "<li>Profile it visually in <strong>EDA</strong></li>"
             "<li>Ask business questions in <strong>Analyst</strong></li>"
             "<li>Benchmark models in <strong>Evaluation</strong></li>"
             "<li>Export a deck in <strong>Presentation</strong></li>"
@@ -641,9 +659,119 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
 
 
 # ─────────────────────────────────────────
-# Tab 2 — Analyst
+# Tab 2 — EDA
 # ─────────────────────────────────────────
-def render_analyst(agent: AnalystRAGAgent) -> None:
+def render_eda(dataset_path: str) -> dict[str, Any]:
+    section_header(
+        "EDA Agent",
+        "Deterministic profiling, quality checks, and auto-generated visuals prepare the dataset before analyst Q&A begins.",
+    )
+
+    report = get_eda_report(dataset_path)
+    profile = report["profile"]
+    quality = report["quality_checks"]
+
+    top = st.columns(4)
+    with top[0]:
+        metric_card("Source Format", str(profile["source_format"]), "Detected dataset structure")
+    with top[1]:
+        metric_card("Analysis Grain", f"{profile['analysis_rows']:,} {profile['analysis_grain']}", "Normalized records used for EDA")
+    with top[2]:
+        rate = f"{profile['target_rate']:.1%}" if profile["target_rate"] is not None else "N/A"
+        metric_card("Outcome Rate", rate, "Detected target or purchase rate")
+    with top[3]:
+        metric_card("Top Segment", str(profile["top_customer"]), "Strongest detected grouping")
+
+    gap()
+    left, right = st.columns([1.05, 0.95])
+    with left:
+        section_header("Dataset profile")
+        schema = profile["schema"]
+        schema_rows = {
+            "Source format": profile["source_format"],
+            "Analysis grain": profile["analysis_grain"],
+            "Target column": schema.get("target"),
+            "Time column": schema.get("time"),
+            "Customer grouping": schema.get("customer"),
+            "Channel grouping": schema.get("channel"),
+            "Product grouping": schema.get("product"),
+            "Engagement metric": schema.get("engagement"),
+        }
+        rows_html = ""
+        for key, value in schema_rows.items():
+            val_html = f'<span class="schema-val">{value}</span>' if value else '<span class="schema-nd">not detected</span>'
+            rows_html += f'<div class="schema-row"><span class="schema-key">{key}</span>{val_html}</div>'
+        st.markdown(f'<div class="card">{rows_html}</div>', unsafe_allow_html=True)
+
+    with right:
+        section_header("Suggested business questions")
+        st.markdown(
+            '<div class="card"><ul style="margin:0;padding-left:1.2rem;line-height:1.9;">'
+            + "".join(f"<li>{question}</li>" for question in report["suggested_questions"])
+            + "</ul></div>",
+            unsafe_allow_html=True,
+        )
+
+    gap()
+    q_left, q_right = st.columns([1, 1])
+    with q_left:
+        section_header("Quality checks")
+        quality_items = quality["warnings"][:]
+        if quality["constant_columns"]:
+            quality_items.append(f"Constant columns: {', '.join(quality['constant_columns'][:6])}")
+        st.markdown(
+            '<div class="card"><ul style="margin:0;padding-left:1.2rem;line-height:1.9;">'
+            + "".join(f"<li>{item}</li>" for item in quality_items)
+            + "</ul></div>",
+            unsafe_allow_html=True,
+        )
+    with q_right:
+        section_header("Missingness snapshot")
+        missing_df = pd.DataFrame(quality["missing_summary"][:8])
+        if not missing_df.empty:
+            st.dataframe(missing_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No major missingness issues detected.")
+
+    gap()
+    section_header("Auto-generated charts", "These visuals are created from the uploaded dataset before any analyst question is asked.")
+    charts = report["chart_manifest"]
+    if charts:
+        for idx in range(0, len(charts), 2):
+            cols = st.columns(2)
+            for col, chart in zip(cols, charts[idx: idx + 2]):
+                with col:
+                    st.markdown(
+                        f'<div class="card card-accent"><div class="sec-title" style="font-size:0.98rem;">{chart["title"]}</div>'
+                        f'<div class="small" style="margin:0.25rem 0 0.8rem;">{chart["caption"]}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.image(chart["path"], width=520)
+    else:
+        st.info("No charts were generated for this dataset.")
+
+    gap()
+    handoff_left, handoff_right = st.columns([1, 1])
+    with handoff_left:
+        section_header("Key findings")
+        st.markdown(
+            '<div class="card"><ul style="margin:0;padding-left:1.2rem;line-height:1.9;">'
+            + "".join(f"<li>{finding}</li>" for finding in report["key_findings"])
+            + "</ul></div>",
+            unsafe_allow_html=True,
+        )
+    with handoff_right:
+        section_header("Handoff summary for analyst")
+        with st.expander("Structured handoff payload", expanded=True):
+            st.json(report["handoff_summary"], expanded=True)
+
+    return report
+
+
+# ─────────────────────────────────────────
+# Tab 3 — Analyst
+# ─────────────────────────────────────────
+def render_analyst(agent: AnalystRAGAgent, eda_report: dict[str, Any] | None = None) -> None:
     section_header(
         "Analyst Agent",
         "Ask a business question — the agent retrieves relevant data, reasons over it, and returns a structured answer.",
@@ -660,8 +788,10 @@ def render_analyst(agent: AnalystRAGAgent) -> None:
 
     # Sample questions
     st.markdown('<div class="small" style="margin-bottom:0.4rem;">Try a sample question:</div>', unsafe_allow_html=True)
-    sq_cols = st.columns(len(SAMPLE_QUESTIONS))
-    for i, q in enumerate(SAMPLE_QUESTIONS):
+    sample_questions = (eda_report or {}).get("suggested_questions") or SAMPLE_QUESTIONS
+    sample_questions = sample_questions[:4]
+    sq_cols = st.columns(len(sample_questions))
+    for i, q in enumerate(sample_questions):
         if sq_cols[i].button(f"Sample {i+1}", key=f"sq_{i}", use_container_width=True, help=q):
             st.session_state["question"] = q
             rerun()
@@ -1004,15 +1134,18 @@ def main() -> None:
     render_sidebar(dataset, dataset_name)
     render_topbar(dataset_name, dataset)
 
-    t_overview, t_analyst, t_eval, t_pres = st.tabs(
-        ["Overview", "Analyst", "Evaluation", "Presentation"]
+    t_overview, t_eda, t_analyst, t_eval, t_pres = st.tabs(
+        ["Overview", "EDA", "Analyst", "Evaluation", "Presentation"]
     )
 
     with t_overview:
         render_overview(dataset, dataset_name)
 
+    with t_eda:
+        eda_report = render_eda(dataset_path)
+
     with t_analyst:
-        render_analyst(agent)
+        render_analyst(agent, eda_report)
 
     with t_eval:
         render_evaluation()

@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from agents.eda_agent import EDAAgent
 from utils.dataset_adapter import load_analysis_dataset
 from utils.llm_client import LLMClient
 from utils.parser import extract_json
@@ -68,6 +69,8 @@ class AnalystRAGAgent:
         self.dataset_path = Path(dataset_path)
         adapted = load_analysis_dataset(self.dataset_path)
         self.dataframe = adapted.dataframe
+        self.eda_agent = EDAAgent(output_dir=self.dataset_path.parent)
+        self.eda_report = self.eda_agent.analyze_dataset(self.dataset_path, include_charts=False)
         self.retriever = EcommerceRetriever(self.dataframe)
         self.llm_client = llm_client or LLMClient()
         self.models = models or DEFAULT_MODELS
@@ -81,6 +84,8 @@ class AnalystRAGAgent:
     def _build_prompt(self, question: str, prompt_style: str, context: str, rag_enabled: bool) -> str:
         instruction = PROMPT_STYLES[prompt_style]
         context_block = context if rag_enabled and context else "RAG disabled. Respond from general statistical reasoning only."
+        eda_handoff = self.eda_report.get("handoff_summary", {})
+        eda_chunks = "\n".join(self.eda_report.get("retrieval_chunks", [])[:8])
         return f"""
 {instruction}
 
@@ -89,6 +94,12 @@ Prompt style:
 
 Question:
 {question}
+
+EDA handoff:
+{eda_handoff}
+
+EDA evidence:
+{eda_chunks}
 
 Dataset context:
 {context_block}
