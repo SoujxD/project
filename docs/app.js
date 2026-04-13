@@ -8,7 +8,8 @@ const SAMPLE_QUESTIONS = [
 const STORAGE_KEYS = {
   csv: "ise547_dataset_csv",
   name: "ise547_dataset_name",
-  sampling: "ise547_dataset_sampling"
+  sampling: "ise547_dataset_sampling",
+  loading: "ise547_dataset_loading"
 };
 
 const API_BASE_URL = (window.APP_CONFIG?.API_BASE_URL || "").replace(/\/$/, "");
@@ -61,6 +62,22 @@ function getSamplingInfo() {
   }
 }
 
+function getLoadingInfo() {
+  try {
+    return JSON.parse(sessionStorage.getItem(STORAGE_KEYS.loading) || "null");
+  } catch (_) {
+    return null;
+  }
+}
+
+function setLoadingInfo(info) {
+  if (!info) {
+    sessionStorage.removeItem(STORAGE_KEYS.loading);
+    return;
+  }
+  sessionStorage.setItem(STORAGE_KEYS.loading, JSON.stringify(info));
+}
+
 function saveDataset(fileName, csvText, samplingInfo = null) {
   localStorage.setItem(STORAGE_KEYS.csv, csvText);
   localStorage.setItem(STORAGE_KEYS.name, fileName);
@@ -80,6 +97,30 @@ function sampleRows(rows, limit = MAX_ANALYSIS_ROWS) {
     sampled.push(rows[index]);
   }
   return sampled;
+}
+
+function showLoadingOverlay(message, detail = "This can take a few seconds for larger datasets.") {
+  let overlay = document.getElementById("loadingOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "loadingOverlay";
+    overlay.className = "loading-overlay";
+    overlay.innerHTML = `
+      <div class="loading-card">
+        <div class="loading-spinner"></div>
+        <div class="loading-title" id="loadingTitle"></div>
+        <div class="loading-detail" id="loadingDetail"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  document.getElementById("loadingTitle").textContent = message;
+  document.getElementById("loadingDetail").textContent = detail;
+  overlay.classList.add("visible");
+}
+
+function hideLoadingOverlay() {
+  document.getElementById("loadingOverlay")?.classList.remove("visible");
 }
 
 function makeFormData(extraFields = {}) {
@@ -277,6 +318,7 @@ function bindUploader() {
   input.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    showLoadingOverlay("Uploading dataset", "Preparing the file, applying sampling if needed, and refreshing the overview.");
     const reader = new FileReader();
     reader.onload = async () => {
       const rawText = String(reader.result || "");
@@ -288,6 +330,13 @@ function bindUploader() {
         sourceRows: rows.length,
         analysisRows: sampledRows.length
       };
+      setLoadingInfo({
+        active: true,
+        fileName: file.name,
+        sampled: samplingInfo.sampled,
+        sourceRows: samplingInfo.sourceRows,
+        analysisRows: samplingInfo.analysisRows
+      });
       const csvToStore = samplingInfo.sampled ? Papa.unparse(sampledRows) : rawText;
       saveDataset(file.name, csvToStore, samplingInfo);
       window.location.reload();
@@ -300,16 +349,21 @@ function renderUploadCard(summary) {
   const host = document.getElementById("uploadCard");
   if (!host) return;
   const samplingInfo = getSamplingInfo();
+  const loadingInfo = getLoadingInfo();
   const analysisTag = summary.analysis_rows && summary.analysis_grain
     ? `<span class="tag">Analysis: ${Number(summary.analysis_rows).toLocaleString()} ${summary.analysis_grain}</span>`
     : "";
   const sampledTag = samplingInfo?.sampled
     ? `<span class="tag">Sampled: ${Number(samplingInfo.analysisRows).toLocaleString()} of ${Number(samplingInfo.sourceRows).toLocaleString()} rows</span>`
     : "";
+  const loadingNote = loadingInfo?.active
+    ? `<div class="loading-inline"><span class="inline-spinner"></span><span>Refreshing the overview and regenerating insights for <strong>${loadingInfo.fileName}</strong>${loadingInfo.sampled ? ` using a ${Number(loadingInfo.analysisRows).toLocaleString()}-row sample` : ""}.</span></div>`
+    : "";
   host.innerHTML = `
     <div class="upload-card fade-in">
       <div class="section-title">Active dataset</div>
       <div class="section-subtitle">Upload a customer, session, or ecommerce performance CSV to power all tabs. Large files are sampled automatically for responsive analysis.</div>
+      ${loadingNote}
       <div class="upload-row">
         <input id="datasetUpload" type="file" accept=".csv" />
         <a class="button-link secondary" href="./assets/default_dataset.csv" download>Download sample</a>
@@ -407,6 +461,8 @@ function buildAnalystFallback(rows, question) {
 async function renderOverviewPage(rows) {
   const summary = await getSummary(rows);
   renderUploadCard(summary);
+  hideLoadingOverlay();
+  setLoadingInfo(null);
   document.getElementById("overviewMetrics").innerHTML = [
     metricCard("Rows", summary.rows.toLocaleString(), "Records in the active dataset"),
     metricCard("Columns", summary.columns, "Available fields"),
@@ -831,6 +887,9 @@ async function renderPresentationPage(rows) {
 async function init() {
   const page = document.body.dataset.page;
   renderTopbar(page);
+  if (page === "index.html" && getLoadingInfo()?.active) {
+    showLoadingOverlay("Generating overview insights", "Your dataset is loaded. We are updating the overview cards, schema, and preview.");
+  }
   const rows = await getDataset();
   if (page === "index.html") await renderOverviewPage(rows);
   else if (page === "analyst.html") await renderAnalystPage(rows);
