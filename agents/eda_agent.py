@@ -82,10 +82,23 @@ class EDAAgent:
             return normalized.map(mapping).fillna(0).astype(int)
         return None
 
+    def _is_identifierish(self, column: str, series: pd.Series) -> bool:
+        normalized = self._normalized(column)
+        if any(token in normalized for token in ["id", "uuid", "identifier"]):
+            return True
+        if not pd.api.types.is_numeric_dtype(series):
+            return False
+        numeric = pd.to_numeric(series, errors="coerce").dropna()
+        if numeric.empty or numeric.nunique(dropna=True) != len(numeric):
+            return False
+        ordered = numeric.sort_values().reset_index(drop=True)
+        steps = ordered.diff().dropna()
+        return not steps.empty and steps.nunique() == 1
+
     def _resolve_target_column(self, dataset: pd.DataFrame) -> str | None:
         keyword_matches: list[str] = []
         normalized_map = {column: self._normalized(column) for column in dataset.columns}
-        for keyword in ["purchased", "converted", "conversion", "purchase_count", "purchase", "order"]:
+        for keyword in ["revenue", "purchased", "converted", "conversion", "purchase_count", "purchase", "order"]:
             probe = self._normalized(keyword)
             keyword_matches.extend(
                 column
@@ -159,7 +172,7 @@ class EDAAgent:
         excluded = {value for value in schema.values() if value}
         cols: list[str] = []
         for column in dataset.select_dtypes(include=["number", "bool"]).columns:
-            if column not in excluded:
+            if column not in excluded and not self._is_identifierish(column, dataset[column]):
                 cols.append(column)
         return cols
 

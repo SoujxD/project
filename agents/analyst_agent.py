@@ -70,7 +70,8 @@ class AnalystRAGAgent:
         self.dataset_path = Path(dataset_path)
         adapted = load_analysis_dataset(self.dataset_path)
         self.dataframe = adapted.dataframe
-        self.eda_agent = EDAAgent(output_dir=self.dataset_path.parent)
+        output_dir = Path(__file__).resolve().parents[1] / "outputs"
+        self.eda_agent = EDAAgent(output_dir=output_dir)
         cache_key = self._dataset_cache_key()
         self.eda_report = self.eda_agent.analyze_dataset(self.dataset_path, include_charts=False, cache_key=cache_key)
         self.retriever = EcommerceRetriever(self.dataframe)

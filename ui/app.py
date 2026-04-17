@@ -682,8 +682,8 @@ def render_overview(dataset: pd.DataFrame, dataset_name: str) -> None:
         schema_items = {
             "Dataset": dataset_name,
             "Outcome column": schema.get("target"),
-            "Customer grouping": schema.get("customer"),
-            "Channel grouping": schema.get("channel"),
+            "Customer grouping": schema.get("primary_dimension"),
+            "Channel grouping": schema.get("secondary_dimension"),
             "Time grouping": schema.get("time"),
         }
         for k, v in schema_items.items():
@@ -990,14 +990,20 @@ def render_analyst(agent: AnalystRAGAgent, eda_report: dict[str, Any] | None = N
 # Tab 3 — Evaluation
 # ─────────────────────────────────────────
 def render_evaluation() -> None:
+    dataset_path = Path(st.session_state["ds_path"])
+    using_default_dataset = dataset_path.resolve() == DEFAULT_DATASET_PATH.resolve()
     section_header(
         "Evaluation Dashboard",
-        "Benchmark all model and prompt combinations on the standard dataset. Results persist across sessions.",
+        "Benchmark all model and prompt combinations on the active dataset. Default data uses the fixed course benchmark; uploaded data uses adaptive evaluation questions.",
     )
 
     results_df = load_results()
-    benchmark_agent = AnalystRAGAgent(dataset_path=DEFAULT_DATASET_PATH)
-    pipeline = EvaluationPipeline(agent=benchmark_agent, questions_path=QUESTIONS_PATH, output_dir=OUTPUT_DIR)
+    benchmark_agent = AnalystRAGAgent(dataset_path=dataset_path)
+    pipeline = EvaluationPipeline(
+        agent=benchmark_agent,
+        questions_path=QUESTIONS_PATH if using_default_dataset else None,
+        output_dir=OUTPUT_DIR,
+    )
 
     # Controls
     ctrl = st.columns([0.6, 0.8, 0.6, 1.2])
@@ -1012,6 +1018,11 @@ def render_evaluation() -> None:
             results_df = pipeline.run(limit=int(limit))
         progress.progress(100, text="Done")
         st.success(f"Benchmark complete — {len(results_df)} rows saved.")
+
+    if using_default_dataset:
+        st.caption("Using the fixed evaluation benchmark packaged with the default dataset.")
+    else:
+        st.caption(f"Using adaptive evaluation questions generated from the active dataset: `{dataset_path.name}`")
 
     if results_df is None:
         st.info("Click **Run benchmark** to generate evaluation results.")

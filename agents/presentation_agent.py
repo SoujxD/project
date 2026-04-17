@@ -98,10 +98,24 @@ class PresentationGeneratorAgent:
             return normalized.map(mapping).fillna(0).astype(int)
         return None
 
+    def _is_identifierish(self, column: str, series: pd.Series) -> bool:
+        normalized = self._normalized(column)
+        if any(token in normalized for token in ["id", "uuid", "identifier"]):
+            return True
+        if not pd.api.types.is_numeric_dtype(series):
+            return False
+        numeric = pd.to_numeric(series, errors="coerce").dropna()
+        if numeric.empty or numeric.nunique(dropna=True) != len(numeric):
+            return False
+        ordered = numeric.sort_values().reset_index(drop=True)
+        steps = ordered.diff().dropna()
+        return not steps.empty and steps.nunique() == 1
+
     def _resolve_target_column(self, dataset: pd.DataFrame) -> str | None:
         keyword_matches: list[str] = []
         normalized_map = {column: self._normalized(column) for column in dataset.columns}
         keywords = [
+            "revenue",
             "target",
             "label",
             "outcome",
@@ -168,12 +182,19 @@ class PresentationGeneratorAgent:
                 continue
             if pd.api.types.is_bool_dtype(series) or pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
                 candidates.append(column)
+                continue
+            if self._is_identifierish(column, series):
+                continue
+            if pd.api.types.is_numeric_dtype(series) and 2 < nunique <= min(12, max(4, int(len(dataset) * 0.25))):
+                candidates.append(column)
         return candidates
 
     def _numeric_metric_candidates(self, dataset: pd.DataFrame, exclude: set[str]) -> list[str]:
-        candidates: list[str] = []
+        scored: list[tuple[float, str]] = []
         for column in dataset.select_dtypes(include=["number", "bool"]).columns:
             if column in exclude:
+                continue
+            if self._is_identifierish(column, dataset[column]):
                 continue
             series = pd.to_numeric(dataset[column], errors="coerce")
             if series.dropna().empty:
@@ -181,8 +202,17 @@ class PresentationGeneratorAgent:
             unique_values = set(series.dropna().unique().tolist())
             if unique_values and unique_values.issubset({0, 1}):
                 continue
-            candidates.append(column)
-        return candidates
+            nunique = series.nunique(dropna=True)
+            if nunique <= 3:
+                continue
+            normalized = self._normalized(column)
+            score = float(min(nunique, 50))
+            if any(token in normalized for token in ["value", "rate", "score", "amount", "price", "duration", "page", "bounce", "exit"]):
+                score += 25
+            if any(token in normalized for token in ["type", "region", "category", "segment"]):
+                score -= 10
+            scored.append((score, column))
+        return [column for _, column in sorted(scored, reverse=True)]
 
     def infer_schema(self, dataset: pd.DataFrame) -> dict[str, Any]:
         """Infer broadly useful roles from a flexible tabular dataset."""
