@@ -1,4 +1,4 @@
-"""Presentation generator agent focused on reusable ecommerce dataset insights."""
+"""Presentation generator agent for dataset-adaptive insight decks."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import shutil
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,6 +33,8 @@ class SlideContent:
 class PresentationGeneratorAgent:
     """Generates dataset-focused charts and a reusable PowerPoint deck."""
 
+    CHART_DPI = 180
+
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -47,11 +50,11 @@ class PresentationGeneratorAgent:
         exclude = exclude or set()
         normalized_map = {column: self._normalized(column) for column in dataset.columns}
         for keyword in keywords:
-            norm_keyword = self._normalized(keyword)
-            for column, norm_column in normalized_map.items():
+            probe = self._normalized(keyword)
+            for column, normalized in normalized_map.items():
                 if column in exclude:
                     continue
-                if norm_keyword in norm_column:
+                if probe in normalized:
                     return column
         return None
 
@@ -59,160 +62,325 @@ class PresentationGeneratorAgent:
         if pd.api.types.is_bool_dtype(series):
             return series.astype(int)
         if pd.api.types.is_numeric_dtype(series):
-            cleaned = series.dropna()
+            cleaned = pd.to_numeric(series, errors="coerce").dropna()
             unique_values = set(cleaned.unique().tolist())
             if unique_values and unique_values.issubset({0, 1}):
-                return series.fillna(0).astype(int)
-        if pd.api.types.is_object_dtype(series):
-            lowered = series.astype(str).str.strip().str.lower()
-            mapping = {
-                "true": 1, "false": 0,
-                "yes": 1, "no": 0,
-                "y": 1, "n": 0,
-                "converted": 1, "not_converted": 0,
-                "purchase": 1, "no_purchase": 0,
-                "purchased": 1, "not_purchased": 0,
-            }
-            unique_values = set(lowered.dropna().unique().tolist())
-            if unique_values and unique_values.issubset(set(mapping)):
-                return lowered.map(mapping).fillna(0).astype(int)
+                return pd.to_numeric(series, errors="coerce").fillna(0).astype(int)
+        non_null = series.dropna()
+        lowered = non_null.astype("string").str.strip().str.lower()
+        mapping = {
+            "1": 1,
+            "0": 0,
+            "true": 1,
+            "false": 0,
+            "yes": 1,
+            "no": 0,
+            "y": 1,
+            "n": 0,
+            "purchase": 1,
+            "no_purchase": 0,
+            "purchased": 1,
+            "not_purchased": 0,
+            "converted": 1,
+            "not_converted": 0,
+            "retained": 1,
+            "not_retained": 0,
+            "churned": 1,
+            "not_churned": 0,
+            "approved": 1,
+            "rejected": 0,
+            "success": 1,
+            "failed": 0,
+        }
+        unique_values = set(lowered.dropna().unique().tolist())
+        if unique_values and unique_values.issubset(set(mapping)):
+            normalized = series.astype("string").str.strip().str.lower()
+            return normalized.map(mapping).fillna(0).astype(int)
         return None
 
-    def infer_schema(self, dataset: pd.DataFrame) -> dict[str, str | None]:
-        """Infer common ecommerce columns from flexible schemas."""
-        target_col = self._find_column(
-            dataset,
-            ["revenue", "converted", "conversion", "purchase", "purchased", "ordered", "order"],
-        )
-        if target_col is None:
-            for column in dataset.columns:
-                if self._target_series(dataset[column]) is not None:
-                    target_col = column
-                    break
-
-        time_col = self._find_column(dataset, ["month", "date", "week", "season", "day", "period"])
-        customer_col = self._find_column(
-            dataset,
-            ["visitor", "customer", "segment", "user_type", "member", "cohort", "device", "browser", "brand", "category"],
-            exclude={time_col} if time_col else set(),
-        )
-        channel_col = self._find_column(
-            dataset,
-            ["traffic", "channel", "source", "campaign", "medium", "acquisition", "referrer", "category", "brand"],
-            exclude={time_col, customer_col} - {None},
-        )
-        engagement_col = self._find_column(
-            dataset,
-            ["pagevalue", "page_value", "pagevalues", "basket", "cart", "duration", "session", "product", "engagement", "event_count", "avg_price", "price"],
-            exclude={time_col, customer_col, channel_col} - {None},
-        )
-        friction_col = self._find_column(
-            dataset,
-            ["bounce", "exit", "drop", "abandon", "friction"],
-            exclude={time_col, customer_col, channel_col, engagement_col} - {None},
-        )
-
-        numeric_candidates = [
-            column for column in dataset.select_dtypes(include=["number", "bool"]).columns
-            if column not in {target_col, time_col, customer_col, channel_col, engagement_col, friction_col}
+    def _resolve_target_column(self, dataset: pd.DataFrame) -> str | None:
+        keyword_matches: list[str] = []
+        normalized_map = {column: self._normalized(column) for column in dataset.columns}
+        keywords = [
+            "target",
+            "label",
+            "outcome",
+            "converted",
+            "conversion",
+            "purchased",
+            "purchase",
+            "churn",
+            "retain",
+            "default",
+            "fraud",
+            "approved",
+            "success",
         ]
-        fallback_numeric = numeric_candidates[0] if numeric_candidates else None
+        for keyword in keywords:
+            probe = self._normalized(keyword)
+            keyword_matches.extend(
+                column
+                for column, normalized in normalized_map.items()
+                if probe in normalized and column not in keyword_matches
+            )
+        for column in keyword_matches:
+            if self._target_series(dataset[column]) is not None:
+                return column
+        for column in dataset.columns:
+            if self._target_series(dataset[column]) is not None:
+                return column
+        return None
+
+    def _time_like_column(self, dataset: pd.DataFrame, exclude: set[str]) -> str | None:
+        keyword_match = self._find_column(
+            dataset,
+            ["timestamp", "datetime", "date", "month", "week", "day", "year", "period", "quarter", "time"],
+            exclude=exclude,
+        )
+        if keyword_match:
+            return keyword_match
+
+        for column in dataset.columns:
+            if column in exclude:
+                continue
+            series = dataset[column]
+            if pd.api.types.is_datetime64_any_dtype(series):
+                return column
+            if not (pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)):
+                continue
+            sample = series.dropna().astype("string").head(200)
+            if sample.empty:
+                continue
+            parsed = pd.to_datetime(sample, errors="coerce", format="mixed")
+            success_rate = float(parsed.notna().mean())
+            if success_rate >= 0.7 and sample.nunique() >= 3:
+                return column
+        return None
+
+    def _categorical_candidates(self, dataset: pd.DataFrame, exclude: set[str]) -> list[str]:
+        candidates: list[str] = []
+        for column in dataset.columns:
+            if column in exclude:
+                continue
+            series = dataset[column]
+            nunique = int(series.nunique(dropna=True))
+            if nunique <= 1:
+                continue
+            if pd.api.types.is_bool_dtype(series) or pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+                candidates.append(column)
+        return candidates
+
+    def _numeric_metric_candidates(self, dataset: pd.DataFrame, exclude: set[str]) -> list[str]:
+        candidates: list[str] = []
+        for column in dataset.select_dtypes(include=["number", "bool"]).columns:
+            if column in exclude:
+                continue
+            series = pd.to_numeric(dataset[column], errors="coerce")
+            if series.dropna().empty:
+                continue
+            unique_values = set(series.dropna().unique().tolist())
+            if unique_values and unique_values.issubset({0, 1}):
+                continue
+            candidates.append(column)
+        return candidates
+
+    def infer_schema(self, dataset: pd.DataFrame) -> dict[str, Any]:
+        """Infer broadly useful roles from a flexible tabular dataset."""
+        target_col = self._resolve_target_column(dataset)
+        time_col = self._time_like_column(dataset, exclude={target_col} - {None})
+
+        exclude = {target_col, time_col} - {None}
+        categorical_candidates = self._categorical_candidates(dataset, exclude)
+        numeric_candidates = self._numeric_metric_candidates(dataset, exclude)
+
+        primary_dimension = categorical_candidates[0] if categorical_candidates else None
+        secondary_dimension = categorical_candidates[1] if len(categorical_candidates) > 1 else None
+        primary_metric = numeric_candidates[0] if numeric_candidates else None
+        secondary_metric = numeric_candidates[1] if len(numeric_candidates) > 1 else None
 
         return {
             "target": target_col,
             "time": time_col,
-            "customer": customer_col,
-            "channel": channel_col,
-            "engagement": engagement_col or fallback_numeric,
-            "friction": friction_col,
+            "primary_dimension": primary_dimension,
+            "secondary_dimension": secondary_dimension,
+            "primary_metric": primary_metric,
+            "secondary_metric": secondary_metric,
+            "categorical_candidates": categorical_candidates[:6],
+            "numeric_candidates": numeric_candidates[:6],
         }
 
-    def _target_metric(self, dataset: pd.DataFrame, schema: dict[str, str | None]) -> pd.Series | None:
-        target_col = schema["target"]
-        if not target_col:
+    def _target_metric(self, dataset: pd.DataFrame, schema: dict[str, Any]) -> pd.Series | None:
+        target_col = schema.get("target")
+        if not target_col or target_col not in dataset.columns:
             return None
         return self._target_series(dataset[target_col])
 
     def _series_by_dimension(
         self,
         dataset: pd.DataFrame,
-        schema: dict[str, str | None],
+        schema: dict[str, Any],
         dimension: str | None,
         top_n: int = 8,
     ) -> pd.Series | None:
-        if not dimension:
+        if not dimension or dimension not in dataset.columns:
             return None
         working = dataset.copy()
         metric = self._target_metric(working, schema)
         if metric is not None:
             working["_metric_target"] = metric
-            series = working.groupby(dimension)["_metric_target"].mean().sort_values(ascending=False).head(top_n)
-            return series
-        series = working[dimension].astype(str).value_counts().head(top_n)
-        return series.sort_values(ascending=False)
+            return working.groupby(dimension, dropna=False)["_metric_target"].mean().sort_values(ascending=False).head(top_n)
+        return working[dimension].astype(str).value_counts(dropna=False).head(top_n).sort_values(ascending=False)
 
-    def _bucket_series(self, dataset: pd.DataFrame, schema: dict[str, str | None]) -> tuple[pd.Series | None, str]:
-        numeric_col = schema["engagement"] or schema["friction"]
+    def _time_series(self, dataset: pd.DataFrame, schema: dict[str, Any], top_n: int = 12) -> pd.Series | None:
+        time_col = schema.get("time")
+        if not time_col or time_col not in dataset.columns:
+            return None
+        metric = self._target_metric(dataset, schema)
+        labels = dataset[time_col]
+        if pd.api.types.is_datetime64_any_dtype(labels):
+            labels = labels.dt.strftime("%Y-%m-%d")
+        else:
+            converted = pd.to_datetime(labels, errors="coerce", format="mixed")
+            if converted.notna().mean() >= 0.6:
+                labels = converted.dt.strftime("%Y-%m-%d").fillna(dataset[time_col].astype(str))
+            else:
+                labels = dataset[time_col].astype(str)
+        working = pd.DataFrame({"time": labels})
+        if metric is not None:
+            working["metric"] = metric
+            series = working.groupby("time", dropna=False)["metric"].mean()
+        else:
+            series = working["time"].value_counts(dropna=False)
+        return series.sort_index().tail(top_n)
+
+    def _bucket_series(self, dataset: pd.DataFrame, schema: dict[str, Any]) -> tuple[pd.Series | None, str]:
+        numeric_col = schema.get("primary_metric") or schema.get("secondary_metric")
         if not numeric_col or numeric_col not in dataset.columns:
             return None, ""
-        numeric_series = pd.to_numeric(dataset[numeric_col], errors="coerce").dropna()
-        if numeric_series.empty:
+        numeric_series = pd.to_numeric(dataset[numeric_col], errors="coerce")
+        valid = numeric_series.dropna()
+        if valid.empty:
             return None, ""
-
-        working = dataset.loc[numeric_series.index].copy()
-        metric = self._target_metric(working, schema)
-
-        quantiles = np.unique(np.quantile(numeric_series, [0, 0.25, 0.5, 0.75, 1.0]))
-        if len(quantiles) < 3:
-            bins = np.linspace(float(numeric_series.min()), float(numeric_series.max()) + 1e-6, 4)
-        else:
-            bins = quantiles
+        quantiles = np.unique(np.quantile(valid, [0, 0.25, 0.5, 0.75, 1.0]))
+        bins = quantiles if len(quantiles) >= 3 else np.linspace(float(valid.min()), float(valid.max()) + 1e-6, 5)
         labels = [f"Q{i + 1}" for i in range(len(bins) - 1)]
-        bucketed = pd.cut(pd.to_numeric(working[numeric_col], errors="coerce"), bins=bins, labels=labels, include_lowest=True, duplicates="drop")
+        bucketed = pd.cut(numeric_series, bins=bins, labels=labels, include_lowest=True, duplicates="drop")
+        metric = self._target_metric(dataset, schema)
         if metric is not None:
-            working["_metric_target"] = metric
-            series = working.groupby(bucketed, observed=False)["_metric_target"].mean()
-            return series, numeric_col
-        series = working.groupby(bucketed, observed=False).size()
-        return series, numeric_col
+            working = pd.DataFrame({"bucket": bucketed, "metric": metric})
+            return working.groupby("bucket", observed=False)["metric"].mean(), numeric_col
+        return bucketed.value_counts().sort_index(), numeric_col
 
-    def _format_metric_label(self, schema: dict[str, str | None], has_target: bool) -> str:
-        return "Conversion Rate" if has_target else "Share / Count"
+    def _count_missing(self, dataset: pd.DataFrame) -> pd.Series:
+        return (dataset.isna().mean() * 100).sort_values(ascending=False)
 
-    def summarize_dataset(self, dataset_path: str | Path) -> dict[str, object]:
+    def _plot_bar(self, series: pd.Series, title: str, path: Path, horizontal: bool = False, ylabel: str = "Value") -> None:
+        fig, ax = plt.subplots(figsize=(8, 4.4))
+        color = "#1E5F74"
+        if horizontal:
+            series.sort_values().plot(kind="barh", ax=ax, color=color)
+            ax.set_xlabel(ylabel)
+            ax.set_ylabel("")
+        else:
+            series.plot(kind="bar", ax=ax, color=color)
+            ax.set_xlabel("")
+            ax.set_ylabel(ylabel)
+            plt.setp(ax.get_xticklabels(), rotation=24, ha="right")
+        ax.set_title(title, fontsize=13)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(path, dpi=self.CHART_DPI)
+        plt.close(fig)
+
+    def _plot_line(self, series: pd.Series, title: str, path: Path, ylabel: str = "Value") -> None:
+        cleaned = pd.to_numeric(series, errors="coerce").dropna()
+        if cleaned.empty:
+            return
+        fig, ax = plt.subplots(figsize=(8, 4.4))
+        x = np.arange(len(cleaned))
+        ax.plot(x, cleaned.values.astype(float), color="#1E5F74", linewidth=2.5, marker="o")
+        ax.fill_between(x, cleaned.values.astype(float), color="#9ED8DB", alpha=0.5)
+        ax.set_xticks(x)
+        ax.set_xticklabels([str(value) for value in cleaned.index], rotation=22, ha="right")
+        ax.set_title(title, fontsize=13)
+        ax.set_xlabel("")
+        ax.set_ylabel(ylabel)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(path, dpi=self.CHART_DPI)
+        plt.close(fig)
+
+    def _plot_hist(self, series: pd.Series, title: str, path: Path) -> None:
+        cleaned = pd.to_numeric(series, errors="coerce").dropna()
+        if cleaned.empty:
+            return
+        fig, ax = plt.subplots(figsize=(8, 4.2))
+        ax.hist(cleaned, bins=18, color="#4F8FBF", edgecolor="white", alpha=0.9)
+        ax.set_title(title, fontsize=13)
+        ax.set_xlabel(series.name or "Value")
+        ax.set_ylabel("Count")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(path, dpi=self.CHART_DPI)
+        plt.close(fig)
+
+    def _render_chart(self, path: Path, render: Any) -> bool:
+        if path.exists():
+            path.unlink()
+        render()
+        return path.exists()
+
+    def _format_metric_label(self, has_target: bool) -> str:
+        return "Outcome Rate" if has_target else "Volume"
+
+    def summarize_dataset(self, dataset_path: str | Path) -> dict[str, Any]:
         adapted = load_analysis_dataset(dataset_path)
         dataset = adapted.dataframe
         schema = self.infer_schema(dataset)
         target_metric = self._target_metric(dataset, schema)
-        time_series = self._series_by_dimension(dataset, schema, schema["time"])
-        customer_series = self._series_by_dimension(dataset, schema, schema["customer"])
-        channel_series = self._series_by_dimension(dataset, schema, schema["channel"])
+        time_series = self._time_series(dataset, schema)
+        primary_series = self._series_by_dimension(dataset, schema, schema.get("primary_dimension"))
+        secondary_series = self._series_by_dimension(dataset, schema, schema.get("secondary_dimension"))
         bucket_series, bucket_col = self._bucket_series(dataset, schema)
+        missing_share = self._count_missing(dataset)
 
         target_rate = float(target_metric.mean()) if target_metric is not None else None
-        top_customer = str(customer_series.index[0]) if customer_series is not None and len(customer_series) else "Top segment unavailable"
-        top_channel = str(channel_series.index[0]) if channel_series is not None and len(channel_series) else "Top channel unavailable"
-        top_time = str(time_series.index[0]) if time_series is not None and len(time_series) else "Peak period unavailable"
+        top_time = str(time_series.index[-1]) if time_series is not None and len(time_series) else "No clear time pattern detected"
+        top_primary = str(primary_series.index[0]) if primary_series is not None and len(primary_series) else "No dominant segment detected"
+        top_secondary = str(secondary_series.index[0]) if secondary_series is not None and len(secondary_series) else "No second grouping detected"
+        primary_metric = schema.get("primary_metric")
+        metric_summary = None
+        if primary_metric and primary_metric in dataset.columns:
+            metric_series = pd.to_numeric(dataset[primary_metric], errors="coerce").dropna()
+            if not metric_series.empty:
+                metric_summary = {
+                    "column": primary_metric,
+                    "mean": float(metric_series.mean()),
+                    "median": float(metric_series.median()),
+                }
 
-        engagement_col = schema["engagement"]
-        friction_col = schema["friction"]
-        engagement_delta = None
-        friction_delta = None
-        if target_metric is not None:
-            revenue_mask = target_metric == 1
-            non_revenue_mask = target_metric == 0
-            if engagement_col and engagement_col in dataset.columns:
-                engagement_series = pd.to_numeric(dataset[engagement_col], errors="coerce")
-                engagement_delta = (
-                    float(engagement_series[revenue_mask].mean()) if revenue_mask.any() else math.nan,
-                    float(engagement_series[non_revenue_mask].mean()) if non_revenue_mask.any() else math.nan,
-                )
-            if friction_col and friction_col in dataset.columns:
-                friction_series = pd.to_numeric(dataset[friction_col], errors="coerce")
-                friction_delta = (
-                    float(friction_series[revenue_mask].mean()) if revenue_mask.any() else math.nan,
-                    float(friction_series[non_revenue_mask].mean()) if non_revenue_mask.any() else math.nan,
-                )
+        top_missing = None
+        if not missing_share.empty and float(missing_share.iloc[0]) > 0:
+            top_missing = {"column": str(missing_share.index[0]), "missing_pct": round(float(missing_share.iloc[0]), 2)}
+
+        key_findings: list[str] = []
+        if target_rate is not None:
+            key_findings.append(f"Detected binary outcome rate is {target_rate:.1%}.")
+        if schema.get("primary_dimension") and primary_series is not None and len(primary_series):
+            key_findings.append(f"Top grouping on {schema['primary_dimension']} is {top_primary}.")
+        if schema.get("secondary_dimension") and secondary_series is not None and len(secondary_series):
+            key_findings.append(f"Secondary pattern is led by {top_secondary} on {schema['secondary_dimension']}.")
+        if schema.get("time") and time_series is not None and len(time_series):
+            key_findings.append(f"Time pattern is available through {schema['time']}.")
+        if metric_summary is not None:
+            key_findings.append(
+                f"Primary numeric metric {metric_summary['column']} has mean {metric_summary['mean']:.2f} and median {metric_summary['median']:.2f}."
+            )
+        if top_missing is not None:
+            key_findings.append(f"Largest completeness gap is {top_missing['column']} at {top_missing['missing_pct']:.1f}% missing.")
 
         return {
             "dataset": dataset,
@@ -224,166 +392,200 @@ class PresentationGeneratorAgent:
             "source_format": adapted.source_format,
             "target_rate": target_rate,
             "top_time": top_time,
-            "top_customer": top_customer,
-            "top_channel": top_channel,
-            "engagement_delta": engagement_delta,
-            "friction_delta": friction_delta,
+            "top_primary_dimension_value": top_primary,
+            "top_secondary_dimension_value": top_secondary,
+            "primary_metric_summary": metric_summary,
             "bucket_col": bucket_col,
+            "time_series": time_series,
+            "primary_series": primary_series,
+            "secondary_series": secondary_series,
+            "bucket_series": bucket_series,
+            "top_missing": top_missing,
+            "missing_summary": missing_share.head(8),
+            "key_findings": key_findings[:6],
         }
 
     def generate_charts(self, dataset_path: str | Path) -> dict[str, Path]:
-        dataset = load_analysis_dataset(dataset_path).dataframe
-        schema = self.infer_schema(dataset)
-        has_target = self._target_metric(dataset, schema) is not None
-        ylabel = self._format_metric_label(schema, has_target)
-
-        chart_specs = {
-            "time_performance": (self._series_by_dimension(dataset, schema, schema["time"]), "Performance by Time Period", "bar"),
-            "customer_performance": (self._series_by_dimension(dataset, schema, schema["customer"]), "Performance by Customer Segment", "barh"),
-            "channel_performance": (self._series_by_dimension(dataset, schema, schema["channel"]), "Performance by Acquisition Channel", "bar"),
-        }
-        bucket_series, bucket_col = self._bucket_series(dataset, schema)
-        chart_specs["engagement_buckets"] = (
-            bucket_series,
-            f"Performance by {bucket_col} Bucket" if bucket_col else "Performance by Numeric Bucket",
-            "line",
-        )
-
-        palette = {
-            "primary": "#1E5F74",
-            "secondary": "#4F8FBF",
-            "accent": "#7FC8A9",
-            "warm": "#E7A33E",
-        }
-        plt.style.use("seaborn-v0_8-whitegrid")
+        summary = self.summarize_dataset(dataset_path)
+        dataset = summary["dataset"]
+        schema = summary["schema"]
+        has_target = summary["target_rate"] is not None
+        ylabel = self._format_metric_label(has_target)
 
         chart_paths: dict[str, Path] = {}
-        for index, (key, (series, title, chart_type)) in enumerate(chart_specs.items()):
-            if series is None or len(series) == 0:
-                continue
-            fig, ax = plt.subplots(figsize=(8, 4.4))
-            color = list(palette.values())[index % len(palette)]
-            if chart_type == "bar":
-                series.plot(kind="bar", ax=ax, color=color)
-                ax.set_xlabel("")
-                ax.set_ylabel(ylabel)
-            elif chart_type == "barh":
-                series.sort_values().plot(kind="barh", ax=ax, color=color)
-                ax.set_xlabel(ylabel)
-                ax.set_ylabel("")
-            else:
-                series.plot(kind="line", ax=ax, marker="o", linewidth=3, color=color)
-                ax.set_xlabel("")
-                ax.set_ylabel(ylabel)
-            ax.set_title(title, fontsize=14)
-            fig.tight_layout()
-            output_path = self.chart_dir / f"{key}.png"
-            fig.savefig(output_path, dpi=180)
-            plt.close(fig)
-            shutil.copy2(output_path, self.docs_asset_dir / output_path.name)
-            chart_paths[key] = output_path
+        plt.style.use("seaborn-v0_8-whitegrid")
+
+        missing = summary["missing_summary"]
+        if len(missing) and float(missing.iloc[0]) > 0:
+            path = self.chart_dir / "missingness.png"
+            if self._render_chart(path, lambda: self._plot_bar(missing[missing > 0], "Missingness by Column", path, horizontal=True, ylabel="Missing %")):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["missingness"] = path
+
+        time_series = summary["time_series"]
+        if time_series is not None and len(time_series):
+            path = self.chart_dir / "time_trend.png"
+            if self._render_chart(path, lambda: self._plot_line(time_series, f"Trend Across {schema['time']}", path, ylabel=ylabel)):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["time_trend"] = path
+
+        primary_series = summary["primary_series"]
+        if primary_series is not None and len(primary_series):
+            path = self.chart_dir / "primary_dimension.png"
+            title = f"Top Groups by {schema['primary_dimension']}"
+            if self._render_chart(path, lambda: self._plot_bar(primary_series, title, path, ylabel=ylabel)):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["primary_dimension"] = path
+
+        secondary_series = summary["secondary_series"]
+        if secondary_series is not None and len(secondary_series):
+            path = self.chart_dir / "secondary_dimension.png"
+            title = f"Top Groups by {schema['secondary_dimension']}"
+            if self._render_chart(path, lambda: self._plot_bar(secondary_series, title, path, horizontal=True, ylabel=ylabel)):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["secondary_dimension"] = path
+
+        bucket_series = summary["bucket_series"]
+        if bucket_series is not None and len(bucket_series):
+            path = self.chart_dir / "metric_buckets.png"
+            title = f"Performance by {summary['bucket_col']} Bucket"
+            if self._render_chart(path, lambda: self._plot_line(bucket_series, title, path, ylabel=ylabel)):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["metric_buckets"] = path
+        elif schema.get("primary_metric") and schema["primary_metric"] in dataset.columns:
+            metric_col = schema["primary_metric"]
+            path = self.chart_dir / "metric_distribution.png"
+            if self._render_chart(path, lambda: self._plot_hist(dataset[metric_col], f"Distribution of {metric_col}", path)):
+                shutil.copy2(path, self.docs_asset_dir / path.name)
+                chart_paths["metric_distribution"] = path
+
         return chart_paths
+
+    def _dataset_title(self, summary: dict[str, Any]) -> str:
+        schema = summary["schema"]
+        if schema.get("target"):
+            return f"{schema['target']} Insight Summary"
+        if schema.get("primary_dimension"):
+            return f"{schema['primary_dimension']} Performance Review"
+        return "Dataset Insight Summary"
+
+    def _recommendations(self, summary: dict[str, Any]) -> list[str]:
+        schema = summary["schema"]
+        recommendations: list[str] = []
+        if schema.get("primary_dimension"):
+            recommendations.append(
+                f"Prioritize follow-up analysis on the leading {schema['primary_dimension']} group: {summary['top_primary_dimension_value']}."
+            )
+        if schema.get("secondary_dimension"):
+            recommendations.append(
+                f"Compare operational or commercial differences across {schema['secondary_dimension']} to confirm whether the pattern is stable."
+            )
+        if schema.get("primary_metric"):
+            recommendations.append(
+                f"Track {schema['primary_metric']} as a core KPI because it is the strongest detected numeric driver in this dataset."
+            )
+        if summary["top_missing"] is not None:
+            recommendations.append(
+                f"Improve data quality for {summary['top_missing']['column']} before using it in downstream decision-making."
+            )
+        if not recommendations:
+            recommendations.append("Profile additional columns and business context before committing to action based on this dataset alone.")
+        recommendations.append("Re-run this presentation after the next data refresh to confirm that the same patterns persist.")
+        return recommendations[:4]
 
     def build_slide_contents(self, dataset_path: str | Path) -> list[SlideContent]:
         summary = self.summarize_dataset(dataset_path)
         schema = summary["schema"]
+        metric_summary = summary["primary_metric_summary"]
         target_text = (
-            f"Average conversion / purchase rate is {summary['target_rate']:.1%}."
+            f"Detected binary outcome rate is {summary['target_rate']:.1%}."
             if summary["target_rate"] is not None
-            else "The uploaded dataset does not expose a clean binary conversion field, so the story focuses on distributions and segment patterns."
+            else "No clean binary outcome was detected, so the presentation emphasizes distributions, group structure, and metric patterns."
         )
-
-        engagement_text = "Higher-intent sessions show stronger engagement signals."
-        if summary["engagement_delta"] and not any(math.isnan(value) for value in summary["engagement_delta"]):
-            engagement_col = schema["engagement"] or "engagement metric"
-            engagement_text = (
-                f"{engagement_col} is higher for converting sessions "
-                f"({summary['engagement_delta'][0]:.2f} vs {summary['engagement_delta'][1]:.2f})."
+        metric_text = "No strong numeric metric was detected."
+        if metric_summary is not None:
+            metric_text = (
+                f"{metric_summary['column']} is the lead numeric field with mean {metric_summary['mean']:.2f} "
+                f"and median {metric_summary['median']:.2f}."
             )
-
-        friction_text = "Lower-friction journeys are more likely to convert."
-        if summary["friction_delta"] and not any(math.isnan(value) for value in summary["friction_delta"]):
-            friction_col = schema["friction"] or "friction metric"
-            friction_text = (
-                f"{friction_col} is lower for converting sessions "
-                f"({summary['friction_delta'][0]:.3f} vs {summary['friction_delta'][1]:.3f})."
-            )
+        quality_text = (
+            f"Largest completeness issue is {summary['top_missing']['column']} at {summary['top_missing']['missing_pct']:.1f}% missing."
+            if summary["top_missing"] is not None
+            else "No major missingness issue stands out in the analyzed dataset."
+        )
 
         return [
             SlideContent(
-                title="E-Commerce Customer Behavior Insights",
+                title=self._dataset_title(summary),
                 bullets=[
-                    "This presentation summarizes the uploaded ecommerce dataset in a stakeholder-friendly format.",
+                    "This deck was generated from the uploaded dataset without relying on a fixed business template.",
                     (
-                        f"The uploaded file contains {summary['rows']} rows and is analyzed at the "
-                        f"{summary['analysis_grain']} level across {summary['analysis_rows']} records."
+                        f"The file contains {summary['rows']} raw rows and is summarized at the "
+                        f"{summary['analysis_grain']} level across {summary['analysis_rows']} analyzed records."
                     ),
                     target_text,
                 ],
-                speaker_notes="Introduce the dataset story and frame the deck as a business-ready summary of customer behavior patterns.",
+                speaker_notes="Open with the dataset scope, the automated analysis grain, and whether the system found a usable binary outcome.",
             ),
             SlideContent(
-                title="Dataset Snapshot",
+                title="Detected Structure",
                 bullets=[
-                    "The dataset has been automatically profiled to detect customer segments, channel information, and business outcomes.",
-                    f"Peak performance currently appears in {summary['top_time']}.",
-                    f"Most informative customer grouping detected: {schema['customer'] or 'not clearly available'}.",
-                    f"Most informative acquisition grouping detected: {schema['channel'] or 'not clearly available'}.",
+                    f"Detected time field: {schema.get('time') or 'not confidently identified'}.",
+                    f"Primary grouping field: {schema.get('primary_dimension') or 'not confidently identified'}.",
+                    f"Secondary grouping field: {schema.get('secondary_dimension') or 'not confidently identified'}.",
+                    metric_text,
                 ],
-                speaker_notes="Explain how the uploaded dataset was interpreted and which fields drove the analysis.",
-                chart_key="time_performance",
+                speaker_notes="Explain which columns were inferred as the most useful structural dimensions for the analysis.",
+                chart_key="time_trend",
             ),
             SlideContent(
-                title="Target Customers",
+                title="Leading Groups",
                 bullets=[
-                    f"The strongest customer segment in the uploaded data is {summary['top_customer']}.",
-                    f"The strongest acquisition or channel grouping is {summary['top_channel']}.",
-                    "Priority audiences are the segments that combine stronger conversion signals with stronger engagement behavior.",
-                    "These segments are the best candidates for campaign prioritization and personalized targeting.",
+                    f"Leading value for {schema.get('primary_dimension') or 'the primary grouping'} is {summary['top_primary_dimension_value']}.",
+                    f"Leading value for {schema.get('secondary_dimension') or 'the secondary grouping'} is {summary['top_secondary_dimension_value']}.",
+                    "These groups are the first place to look for concentrated opportunity, demand, or operational differences.",
+                    "The best-performing grouping may be worth breaking down further with more business context.",
                 ],
-                speaker_notes="Highlight which customers appear most valuable and where acquisition quality is strongest.",
-                chart_key="customer_performance",
+                speaker_notes="Use the strongest detected categorical patterns to frame which groups deserve the most attention.",
+                chart_key="primary_dimension",
             ),
             SlideContent(
-                title="Behavioral Patterns",
+                title="Metric Patterns",
                 bullets=[
-                    engagement_text,
-                    friction_text,
-                    f"Bucket analysis based on {summary['bucket_col'] or 'the strongest numeric metric'} shows where commercial performance improves.",
-                    "Behavior and customer quality are working together rather than independently.",
+                    metric_text,
+                    (
+                        f"Bucket analysis for {summary['bucket_col']} shows how performance changes across the strongest detected metric."
+                        if summary["bucket_col"]
+                        else "A direct metric distribution is shown because no reliable bucketed performance view was available."
+                    ),
+                    "This gives a more reusable view of the dataset than assuming a single ecommerce funnel structure.",
                 ],
-                speaker_notes="Use this slide to explain the behavioral signals that separate stronger sessions from weaker ones.",
-                chart_key="engagement_buckets",
+                speaker_notes="Explain how the lead metric behaves and whether higher or lower buckets correspond to stronger outcomes or greater volume.",
+                chart_key="metric_buckets" if summary["bucket_col"] else "metric_distribution",
             ),
             SlideContent(
-                title="Key Findings",
+                title="Data Quality",
                 bullets=[
-                    f"Top time period: {summary['top_time']}.",
-                    f"Top customer segment: {summary['top_customer']}.",
-                    f"Top channel grouping: {summary['top_channel']}.",
-                    "The dataset suggests that acquisition quality and on-site engagement both influence business outcomes.",
+                    quality_text,
+                    f"Total analyzed columns: {summary['columns']}.",
+                    "Data quality affects how confidently we can interpret the strongest patterns in the deck.",
+                    "Columns with missing or weak signal should be validated before they drive operational decisions.",
                 ],
-                speaker_notes="Condense the analysis into the most portable executive findings.",
-                chart_key="channel_performance",
+                speaker_notes="Call out the largest quality risk so the audience understands where the analysis is strongest and where caution is needed.",
+                chart_key="missingness",
             ),
             SlideContent(
                 title="Recommendations",
-                bullets=[
-                    "Focus budget on the strongest channels and customer groups identified in the analysis.",
-                    "Improve weak customer journeys by reducing friction and strengthening discovery paths.",
-                    "Use high-intent engagement signals to trigger tailored offers, retention flows, or remarketing.",
-                    "Track the same dimensions over time to validate whether conversion improves after changes.",
-                ],
-                speaker_notes="Translate the patterns into actions across marketing, merchandising, and experience optimization.",
+                bullets=self._recommendations(summary),
+                speaker_notes="Turn the detected structure into a short set of practical next steps grounded in the strongest observed signals.",
+                chart_key="secondary_dimension",
             ),
             SlideContent(
-                title="Conclusion",
-                bullets=[
-                    "The uploaded ecommerce dataset can be turned into a clear commercial story without manual chart building.",
-                    "Target segments, channel quality, and engagement behavior are the main drivers surfaced by the analysis.",
-                    "This workflow is designed to help analysts move quickly from raw data to presentation-ready outputs.",
+                title="Key Takeaways",
+                bullets=summary["key_findings"] or [
+                    "The dataset contains enough structure to support an automated summary, but the strongest story depends on more business context."
                 ],
-                speaker_notes="Close by emphasizing speed, clarity, and repeatability for future ecommerce datasets.",
+                speaker_notes="Close with the sharpest findings surfaced automatically from the uploaded dataset.",
             ),
         ]
 
