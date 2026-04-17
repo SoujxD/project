@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   sampling: "ise547_dataset_sampling",
   loading: "ise547_dataset_loading",
   datasetId: "ise547_dataset_id",
+  previewRows: "ise547_preview_rows",
   summaryCache: "ise547_summary_cache",
   edaCache: "ise547_eda_cache",
   presentationCache: "ise547_presentation_cache"
@@ -92,6 +93,7 @@ async function loadDefaultDataset() {
   const text = await response.text();
   localStorage.setItem(STORAGE_KEYS.csv, text);
   localStorage.setItem(STORAGE_KEYS.name, "default_dataset.csv");
+  localStorage.setItem(STORAGE_KEYS.previewRows, JSON.stringify(parseCsvText(text).data.slice(0, 200)));
   localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify({
     sampled: false,
     sourceRows: parseCsvText(text).data.length,
@@ -103,6 +105,12 @@ async function loadDefaultDataset() {
 async function getDataset() {
   const stored = localStorage.getItem(STORAGE_KEYS.csv);
   if (stored) return parseCsvText(stored).data;
+  try {
+    const previewRows = JSON.parse(localStorage.getItem(STORAGE_KEYS.previewRows) || "null");
+    if (previewRows?.length) return previewRows;
+  } catch (_) {
+    // Fall through to the default dataset.
+  }
   return loadDefaultDataset();
 }
 
@@ -169,7 +177,8 @@ function setLoadingInfo(info) {
 }
 
 function saveDataset(fileName, csvText, samplingInfo = null) {
-  localStorage.setItem(STORAGE_KEYS.csv, csvText);
+  if (csvText) localStorage.setItem(STORAGE_KEYS.csv, csvText);
+  else localStorage.removeItem(STORAGE_KEYS.csv);
   localStorage.setItem(STORAGE_KEYS.name, fileName);
   setStoredDatasetId(null);
   clearCachedResults();
@@ -178,6 +187,10 @@ function saveDataset(fileName, csvText, samplingInfo = null) {
   } else {
     localStorage.removeItem(STORAGE_KEYS.sampling);
   }
+}
+
+function saveDatasetPreview(rows) {
+  localStorage.setItem(STORAGE_KEYS.previewRows, JSON.stringify((rows || []).slice(0, 200)));
 }
 
 function sampleRows(rows, limit = MAX_ANALYSIS_ROWS) {
@@ -237,9 +250,10 @@ async function fetchApi(path, options = {}) {
 }
 
 async function ensureBackendDataset() {
-  if (!hasBackend() || !getStoredCsv()) return null;
+  if (!hasBackend()) return null;
   const existing = getStoredDatasetId();
   if (existing) return existing;
+  if (!getStoredCsv()) return null;
 
   const csv = getStoredCsv();
   const fileName = getDatasetName();
@@ -523,6 +537,7 @@ function bindUploader() {
       const { text: rawText, parsed } = await readCsvFile(file);
       const rows = parsed.data || [];
       const sampledRows = sampleRows(rows);
+      saveDatasetPreview(sampledRows);
       const samplingInfo = {
         sampled: rows.length > sampledRows.length,
         sourceRows: rows.length,
@@ -536,7 +551,16 @@ function bindUploader() {
         analysisRows: samplingInfo.analysisRows
       });
       const csvToStore = samplingInfo.sampled ? Papa.unparse(sampledRows) : rawText;
-      saveDataset(file.name, csvToStore, samplingInfo);
+      if (hasBackend()) {
+        const blob = new Blob([csvToStore], { type: "text/csv" });
+        const formData = new FormData();
+        formData.append("file", blob, file.name);
+        const response = await fetchApi("/api/datasets", { method: "POST", body: formData });
+        saveDataset(file.name, null, samplingInfo);
+        setStoredDatasetId(response?.dataset_id || null);
+      } else {
+        saveDataset(file.name, csvToStore, samplingInfo);
+      }
       window.location.reload();
     } catch (error) {
       showUploadError(error.message || "The uploaded file could not be processed as a CSV.");
@@ -585,6 +609,7 @@ function renderUploadCard(summary) {
     localStorage.removeItem(STORAGE_KEYS.name);
     localStorage.removeItem(STORAGE_KEYS.sampling);
     localStorage.removeItem(STORAGE_KEYS.datasetId);
+    localStorage.removeItem(STORAGE_KEYS.previewRows);
     clearCachedResults();
     window.location.reload();
   });
