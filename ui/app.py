@@ -41,132 +41,175 @@ def inject_styles() -> None:
         """
         <style>
         :root {
-            --border: rgba(21, 76, 97, 0.09);
-            --shadow: 0 8px 24px rgba(17, 52, 68, 0.07);
-            --shadow-md: 0 14px 38px rgba(17, 52, 68, 0.11);
-            --text: #163747;
-            --muted: #5e7a87;
-            --accent: #1d667d;
-            --accent-soft: rgba(29, 102, 125, 0.09);
+            --border: rgba(18, 51, 62, 0.1);
+            --border-strong: rgba(18, 51, 62, 0.18);
+            --shadow: 0 18px 42px rgba(17, 52, 68, 0.08);
+            --shadow-md: 0 24px 54px rgba(17, 52, 68, 0.12);
+            --text: #12333e;
+            --muted: #5e7072;
+            --accent: #0f766e;
+            --accent-2: #1b9aaa;
+            --accent-3: #ff9f1c;
+            --accent-soft: rgba(15, 118, 110, 0.09);
+            --surface: rgba(255,255,255,0.9);
+            --surface-2: rgba(241, 247, 241, 0.8);
         }
 
         /* ── App background ── */
         .stApp {
             background:
-                radial-gradient(ellipse at 80% 0%, rgba(78, 165, 217, 0.12) 0%, transparent 50%),
-                linear-gradient(180deg, #f9fcfe 0%, #f1f6f9 100%);
+                radial-gradient(circle at 8% 10%, rgba(255, 159, 28, 0.16) 0%, transparent 22%),
+                radial-gradient(circle at 82% 0%, rgba(27, 154, 170, 0.15) 0%, transparent 28%),
+                radial-gradient(circle at 90% 84%, rgba(61, 155, 109, 0.12) 0%, transparent 24%),
+                linear-gradient(180deg, #f9fcf7 0%, #eef4ef 52%, #edf2f2 100%);
             color: var(--text);
         }
 
         .block-container {
-            max-width: 1200px;
+            max-width: 1260px;
             padding-top: 1rem;
             padding-bottom: 3rem;
         }
 
         /* ── Sidebar ── */
         [data-testid="stSidebar"] {
-            background: rgba(247, 251, 253, 0.96);
+            background:
+                linear-gradient(180deg, rgba(250, 252, 248, 0.96), rgba(240, 247, 241, 0.92));
             border-right: 1px solid var(--border);
         }
         [data-testid="stSidebarNav"] { display: none; }
 
         /* ── Topbar ── */
         .topbar {
-            background: rgba(255,255,255,0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 20px;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,0.92), rgba(246, 251, 248, 0.86)),
+                radial-gradient(circle at 100% 0%, rgba(255, 159, 28, 0.09), transparent 30%);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(18, 51, 62, 0.08);
+            border-radius: 24px;
             box-shadow: var(--shadow);
-            padding: 1.2rem 1.5rem 1rem;
-            margin-bottom: 0.6rem;
+            padding: 1.25rem 1.55rem 1.05rem;
+            margin-bottom: 0.8rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .topbar::after {
+            content: "";
+            position: absolute;
+            inset: auto -8% -22px 56%;
+            height: 92px;
+            background: linear-gradient(90deg, rgba(255, 159, 28, 0), rgba(255, 159, 28, 0.18), rgba(27, 154, 170, 0));
+            filter: blur(18px);
         }
         .eyebrow {
             font-size: 0.68rem;
             letter-spacing: 0.16em;
             font-weight: 700;
             text-transform: uppercase;
-            color: #4a8599;
+            color: var(--accent-2);
         }
         .hero-title {
-            font-size: 1.75rem;
-            font-weight: 750;
-            line-height: 1.1;
-            background: linear-gradient(130deg, #163747 30%, #1d849e);
+            font-size: 1.95rem;
+            font-weight: 780;
+            line-height: 1.02;
+            background: linear-gradient(130deg, #12333e 18%, #0f766e 56%, #1b9aaa 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin: 0.25rem 0 0.3rem;
+            margin: 0.3rem 0 0.42rem;
+            letter-spacing: -0.03em;
         }
         .hero-sub {
             color: var(--muted);
-            font-size: 0.88rem;
-            line-height: 1.5;
+            font-size: 0.92rem;
+            line-height: 1.62;
+            max-width: 760px;
         }
         .pill-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
         .pill {
-            background: var(--accent-soft);
+            background: rgba(255, 159, 28, 0.09);
             color: var(--accent);
-            border: 1px solid rgba(29,102,125,0.1);
+            border: 1px solid rgba(255, 159, 28, 0.12);
             padding: 0.3rem 0.7rem;
             border-radius: 999px;
             font-size: 0.78rem;
             font-weight: 600;
             white-space: nowrap;
         }
-        .pill.hi { background: var(--accent); color: white; border-color: transparent; }
+        .pill.hi {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 10px 24px rgba(15, 118, 110, 0.16);
+        }
 
         /* ── Section header ── */
         .sec-head {
-            border-left: 3px solid var(--accent);
-            padding-left: 0.6rem;
-            margin: 0.4rem 0 1rem;
+            border-left: 4px solid var(--accent);
+            padding-left: 0.8rem;
+            margin: 0.5rem 0 1rem;
         }
-        .sec-title { font-size: 1.05rem; font-weight: 750; color: #173746; }
-        .sec-sub { color: var(--muted); font-size: 0.86rem; margin-top: 0.12rem; }
+        .sec-title { font-size: 1.12rem; font-weight: 780; color: #12333e; letter-spacing: -0.02em; }
+        .sec-sub { color: var(--muted); font-size: 0.88rem; margin-top: 0.16rem; line-height: 1.6; }
 
         /* ── Cards ── */
         .card {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid var(--border);
-            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(247, 250, 247, 0.86));
+            border: 1px solid rgba(18, 51, 62, 0.08);
+            border-radius: 22px;
             box-shadow: var(--shadow);
-            padding: 1.1rem 1.2rem;
+            padding: 1.15rem 1.2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before, .mc::before, .slide-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+            opacity: 0.82;
         }
         .card-accent { border-top: 3px solid var(--accent); }
 
         /* ── Metric card ── */
         .mc {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid var(--border);
-            border-top: 3px solid var(--accent);
-            border-radius: 18px;
+            background:
+                linear-gradient(160deg, rgba(255,255,255,0.96), rgba(240, 247, 241, 0.84)),
+                radial-gradient(circle at 100% 0%, rgba(255, 159, 28, 0.12), transparent 28%);
+            border: 1px solid rgba(18, 51, 62, 0.08);
+            border-radius: 22px;
             box-shadow: var(--shadow);
-            padding: 0.95rem 1.1rem;
+            padding: 1rem 1.15rem;
             height: 100%;
+            position: relative;
+            overflow: hidden;
         }
         .mc-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b8794; }
-        .mc-val { font-size: 1.55rem; font-weight: 760; color: var(--accent); line-height: 1.1; margin-top: 0.15rem; }
+        .mc-val { font-size: 1.72rem; font-weight: 780; color: var(--accent); line-height: 1.05; margin-top: 0.2rem; }
         .mc-cap { font-size: 0.84rem; color: var(--muted); margin-top: 0.2rem; }
 
         /* ── Upload zone ── */
         .upload-zone {
-            border: 2px dashed rgba(29,102,125,0.25);
-            border-radius: 18px;
-            padding: 1.5rem 1.2rem;
+            border: 2px dashed rgba(15,118,110,0.24);
+            border-radius: 22px;
+            padding: 1.7rem 1.3rem;
             text-align: center;
-            background: rgba(29,102,125,0.03);
+            background:
+                radial-gradient(circle at 0% 0%, rgba(255, 159, 28, 0.1), transparent 24%),
+                linear-gradient(180deg, rgba(255,255,255,0.72), rgba(241,247,241,0.72));
             margin-bottom: 0.8rem;
         }
-        .upload-zone-title { font-weight: 700; color: var(--accent); font-size: 0.96rem; }
-        .upload-zone-sub { color: var(--muted); font-size: 0.84rem; margin-top: 0.3rem; }
+        .upload-zone-title { font-weight: 760; color: var(--accent); font-size: 1rem; }
+        .upload-zone-sub { color: var(--muted); font-size: 0.86rem; margin-top: 0.36rem; line-height: 1.6; }
 
         /* ── Schema table ── */
         .schema-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.42rem 0;
+            padding: 0.46rem 0;
             border-bottom: 1px solid var(--border);
             font-size: 0.88rem;
         }
@@ -177,31 +220,31 @@ def inject_styles() -> None:
 
         /* ── Analyst response ── */
         .res-section {
-            border-radius: 14px;
-            padding: 0.9rem 1rem;
+            border-radius: 16px;
+            padding: 0.96rem 1.04rem;
             margin-bottom: 0.65rem;
             border: 1px solid var(--border);
         }
-        .res-summary { background: rgba(29,102,125,0.05); border-left: 3px solid var(--accent); }
-        .res-insights { background: rgba(29,102,125,0.03); border-left: 3px solid #4ea5d9; }
-        .res-patterns { background: rgba(180,220,200,0.12); border-left: 3px solid #3aaa82; }
-        .res-recs { background: rgba(255,230,180,0.15); border-left: 3px solid #c98a2e; }
+        .res-summary { background: rgba(15,118,110,0.07); border-left: 4px solid var(--accent); }
+        .res-insights { background: rgba(27,154,170,0.08); border-left: 4px solid var(--accent-2); }
+        .res-patterns { background: rgba(61,155,109,0.1); border-left: 4px solid #3d9b6d; }
+        .res-recs { background: rgba(255,159,28,0.11); border-left: 4px solid var(--accent-3); }
         .res-label {
             font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
             text-transform: uppercase; margin-bottom: 0.4rem;
         }
         .res-summary .res-label { color: var(--accent); }
-        .res-insights .res-label { color: #2a7da8; }
+        .res-insights .res-label { color: var(--accent-2); }
         .res-patterns .res-label { color: #2a8a68; }
-        .res-recs .res-label { color: #a07020; }
+        .res-recs .res-label { color: #b86f14; }
         .res-text { color: var(--text); font-size: 0.9rem; line-height: 1.6; }
         .res-list { margin: 0; padding-left: 1.1rem; color: var(--text); font-size: 0.9rem; line-height: 1.65; }
 
         /* ── Evidence block ── */
         .evidence-wrap {
-            background: #f4f8fb;
+            background: rgba(247, 250, 247, 0.88);
             border: 1px solid var(--border);
-            border-radius: 14px;
+            border-radius: 16px;
             padding: 0.9rem 1rem;
             font-family: "SF Mono", "Fira Code", monospace;
             font-size: 0.78rem;
@@ -222,14 +265,14 @@ def inject_styles() -> None:
             font-weight: 700;
         }
         .badge-hi { background: rgba(29,122,97,0.11); color: #1d7a61; }
-        .badge-md { background: rgba(176,125,46,0.11); color: #b07d2e; }
+        .badge-md { background: rgba(255,159,28,0.14); color: #b86f14; }
         .badge-lo { background: rgba(160,48,48,0.11); color: #a03030; }
 
         /* ── Eval section divider ── */
         .eval-group {
-            background: rgba(255,255,255,0.85);
+            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(247, 250, 247, 0.84));
             border: 1px solid var(--border);
-            border-radius: 18px;
+            border-radius: 22px;
             padding: 1.1rem 1.2rem;
             margin-bottom: 1.1rem;
             box-shadow: var(--shadow);
@@ -239,7 +282,7 @@ def inject_styles() -> None:
             font-weight: 700;
             letter-spacing: 0.1em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-2);
             margin-bottom: 0.75rem;
             padding-bottom: 0.5rem;
             border-bottom: 1px solid var(--border);
@@ -247,15 +290,18 @@ def inject_styles() -> None:
 
         /* ── Slide card ── */
         .slide-card {
-            background: rgba(255,255,255,0.9);
+            background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(247, 250, 247, 0.84));
             border: 1px solid var(--border);
-            border-radius: 18px;
+            border-radius: 22px;
             box-shadow: var(--shadow);
             overflow: hidden;
             margin-bottom: 1rem;
+            position: relative;
         }
         .slide-header {
-            background: linear-gradient(135deg, rgba(29,102,125,0.07), rgba(78,165,217,0.06));
+            background:
+                linear-gradient(135deg, rgba(15,118,110,0.08), rgba(27,154,170,0.06)),
+                radial-gradient(circle at 100% 0%, rgba(255,159,28,0.12), transparent 26%);
             padding: 0.9rem 1.1rem 0.7rem;
             border-bottom: 1px solid var(--border);
         }
@@ -263,15 +309,15 @@ def inject_styles() -> None:
             font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
             text-transform: uppercase; color: var(--accent); margin-bottom: 0.2rem;
         }
-        .slide-title { font-size: 1rem; font-weight: 730; color: #173746; }
+        .slide-title { font-size: 1.02rem; font-weight: 760; color: #12333e; }
         .slide-body { padding: 0.85rem 1.1rem; }
         .slide-bullets { margin: 0; padding-left: 1.1rem; color: var(--text); font-size: 0.88rem; line-height: 1.7; }
         .notes-box {
             margin-top: 0.6rem;
             padding: 0.7rem 0.85rem;
             border-radius: 12px;
-            background: rgba(245,249,252,0.95);
-            border: 1px solid rgba(29,102,125,0.08);
+            background: rgba(244,248,244,0.95);
+            border: 1px solid rgba(15,118,110,0.08);
             color: #526a76;
             font-size: 0.85rem;
             line-height: 1.5;
@@ -282,8 +328,9 @@ def inject_styles() -> None:
             position: relative;
             overflow: hidden;
             background:
-                radial-gradient(circle at 90% 0%, rgba(78,165,217,0.15), transparent 32%),
-                linear-gradient(135deg, rgba(255,255,255,0.96), rgba(244,249,251,0.9));
+                radial-gradient(circle at 90% 0%, rgba(27,154,170,0.16), transparent 32%),
+                radial-gradient(circle at 0% 100%, rgba(255,159,28,0.12), transparent 26%),
+                linear-gradient(135deg, rgba(255,255,255,0.96), rgba(244,249,244,0.9));
         }
         .eda-pill {
             display: inline-flex;
@@ -291,7 +338,7 @@ def inject_styles() -> None:
             gap: 0.45rem;
             padding: 0.35rem 0.7rem;
             border-radius: 999px;
-            background: rgba(29,102,125,0.08);
+            background: rgba(255,159,28,0.1);
             color: var(--accent);
             font-size: 0.72rem;
             font-weight: 700;
@@ -310,15 +357,15 @@ def inject_styles() -> None:
             padding: 0.35rem 0.7rem;
             border-radius: 999px;
             background: rgba(255,255,255,0.82);
-            border: 1px solid rgba(29,102,125,0.08);
+            border: 1px solid rgba(15,118,110,0.08);
             color: #173746;
             font-size: 0.82rem;
             font-weight: 600;
         }
         .eda-chart-card {
-            background: rgba(255,255,255,0.94);
+            background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(246,250,246,0.9));
             border: 1px solid var(--border);
-            border-radius: 18px;
+            border-radius: 20px;
             box-shadow: var(--shadow);
             padding: 1rem 1rem 0.9rem;
         }
@@ -334,42 +381,60 @@ def inject_styles() -> None:
             margin: 0.25rem 0 0.8rem;
         }
         .eda-handoff {
-            background: linear-gradient(180deg, rgba(29,102,125,0.05), rgba(78,165,217,0.04));
-            border: 1px solid rgba(29,102,125,0.09);
-            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(15,118,110,0.06), rgba(27,154,170,0.04));
+            border: 1px solid rgba(15,118,110,0.09);
+            border-radius: 18px;
             padding: 0.9rem 1rem;
         }
 
         /* ── Buttons ── */
         .stButton > button, .stDownloadButton > button {
             border-radius: 999px !important;
-            font-weight: 600 !important;
+            font-weight: 700 !important;
             transition: all 0.18s !important;
         }
-        .stButton > button[kind="primary"] { background: var(--accent) !important; color: white !important; border: none !important; }
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+            color: white !important;
+            border: none !important;
+            box-shadow: 0 10px 24px rgba(15,118,110,0.18) !important;
+        }
+        .stButton > button:hover, .stDownloadButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(18,51,62,0.12) !important;
+        }
 
         /* ── Inputs ── */
         .stTextArea textarea, .stTextInput input, .stNumberInput input,
-        .stSelectbox div[data-baseweb="select"] > div { border-radius: 12px !important; }
+        .stSelectbox div[data-baseweb="select"] > div {
+            border-radius: 14px !important;
+            border-color: rgba(18, 51, 62, 0.12) !important;
+            background: rgba(255,255,255,0.92) !important;
+        }
 
         /* ── Tabs ── */
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.3rem;
             background: transparent;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(18, 51, 62, 0.1);
         }
         .stTabs [data-baseweb="tab"] {
-            background: transparent;
+            background: rgba(255,255,255,0.36);
             border: 1px solid transparent;
             border-bottom: none;
-            border-radius: 10px 10px 0 0;
-            padding: 0.5rem 1rem;
+            border-radius: 12px 12px 0 0;
+            padding: 0.54rem 1rem;
             color: var(--muted);
-            font-weight: 600;
+            font-weight: 700;
             font-size: 0.88rem;
         }
-        .stTabs [data-baseweb="tab"]:hover { background: rgba(29,102,125,0.05); color: var(--accent); }
-        .stTabs [aria-selected="true"] { background: rgba(255,255,255,0.9) !important; color: var(--accent) !important; border-color: var(--border) !important; }
+        .stTabs [data-baseweb="tab"]:hover { background: rgba(255,159,28,0.08); color: var(--accent); }
+        .stTabs [aria-selected="true"] {
+            background: rgba(255,255,255,0.94) !important;
+            color: var(--accent) !important;
+            border-color: var(--border) !important;
+            box-shadow: 0 -8px 24px rgba(18, 51, 62, 0.04);
+        }
 
         /* ── Expander ── */
         .stExpander { border: 1px solid var(--border) !important; border-radius: 14px !important; }
