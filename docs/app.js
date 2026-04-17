@@ -31,6 +31,62 @@ function parseCsvText(text) {
   return Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
 }
 
+function isLikelyBinary(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (!bytes.length) return false;
+  const startsWith = (...signature) => signature.every((byte, index) => bytes[index] === byte);
+  if (startsWith(0x50, 0x4b, 0x03, 0x04)) return true; // xlsx/zip
+  if (startsWith(0x50, 0x41, 0x52, 0x31)) return true; // parquet
+  if (startsWith(0xd0, 0xcf, 0x11, 0xe0)) return true; // legacy xls
+  let nullBytes = 0;
+  const limit = Math.min(bytes.length, 2048);
+  for (let i = 0; i < limit; i += 1) {
+    if (bytes[i] === 0) nullBytes += 1;
+  }
+  return nullBytes / Math.max(limit, 1) > 0.05;
+}
+
+function decodeCsvBuffer(buffer) {
+  const decoders = ["utf-8", "utf-16le", "utf-16be", "windows-1252"];
+  const scoreText = (text) => {
+    if (!text) return -Infinity;
+    const replacement = (text.match(/\uFFFD/g) || []).length;
+    const weird = (text.match(/�/g) || []).length;
+    const commas = (text.match(/,/g) || []).length;
+    const lines = text.split(/\r?\n/).length;
+    return commas + lines - replacement * 8 - weird * 8;
+  };
+
+  let best = "";
+  let bestScore = -Infinity;
+  for (const encoding of decoders) {
+    try {
+      const text = new TextDecoder(encoding, { fatal: false }).decode(buffer);
+      const score = scoreText(text);
+      if (score > bestScore) {
+        best = text;
+        bestScore = score;
+      }
+    } catch (_) {
+      // Try the next decoder.
+    }
+  }
+  return best;
+}
+
+async function readCsvFile(file) {
+  const buffer = await file.arrayBuffer();
+  if (isLikelyBinary(buffer)) {
+    throw new Error("This file does not look like a plain CSV. Please upload a real .csv export, not Excel, Parquet, or another binary file.");
+  }
+  const text = decodeCsvBuffer(buffer);
+  const parsed = parseCsvText(text);
+  if (!parsed.data?.length || (parsed.meta?.fields || []).length === 0) {
+    throw new Error("The uploaded file could not be parsed as a CSV. Please export it as UTF-8 CSV and try again.");
+  }
+  return { text, parsed };
+}
+
 async function loadDefaultDataset() {
   const response = await fetch("./assets/default_dataset.csv");
   const text = await response.text();
@@ -157,6 +213,11 @@ function showLoadingOverlay(message, detail = "This can take a few seconds for l
 
 function hideLoadingOverlay() {
   document.getElementById("loadingOverlay")?.classList.remove("visible");
+}
+
+function showUploadError(message) {
+  hideLoadingOverlay();
+  window.alert(message);
 }
 
 function makeDatasetFormData(datasetId, extraFields = {}) {
@@ -458,10 +519,8 @@ function bindUploader() {
     const file = event.target.files?.[0];
     if (!file) return;
     showLoadingOverlay("Uploading dataset", "Preparing the file, applying sampling if needed, and refreshing the overview.");
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const rawText = String(reader.result || "");
-      const parsed = parseCsvText(rawText);
+    try {
+      const { text: rawText, parsed } = await readCsvFile(file);
       const rows = parsed.data || [];
       const sampledRows = sampleRows(rows);
       const samplingInfo = {
@@ -479,8 +538,10 @@ function bindUploader() {
       const csvToStore = samplingInfo.sampled ? Papa.unparse(sampledRows) : rawText;
       saveDataset(file.name, csvToStore, samplingInfo);
       window.location.reload();
-    };
-    reader.readAsText(file);
+    } catch (error) {
+      showUploadError(error.message || "The uploaded file could not be processed as a CSV.");
+      input.value = "";
+    }
   });
 }
 

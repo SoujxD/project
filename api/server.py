@@ -60,10 +60,32 @@ def _save_upload_bytes(content: bytes, filename: str, dataset_id: str | None = N
 
 
 def _validate_csv(upload_path: Path) -> pd.DataFrame:
+    raw = upload_path.read_bytes()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    signatures = {
+        b"PK\x03\x04": "Excel workbook (.xlsx)",
+        b"PAR1": "Parquet file",
+        b"\xd0\xcf\x11\xe0": "legacy Excel workbook (.xls)",
+    }
+    for signature, label in signatures.items():
+        if raw.startswith(signature):
+            raise HTTPException(status_code=400, detail=f"Uploaded file appears to be a {label}, not a plain CSV.")
+    if raw[:2048].count(b"\x00") / max(min(len(raw), 2048), 1) > 0.05:
+        raise HTTPException(status_code=400, detail="Uploaded file looks binary, not plain CSV text.")
+
+    encodings = ["utf-8", "utf-8-sig", "utf-16", "utf-16le", "utf-16be", "latin-1"]
     try:
-        return pd.read_csv(upload_path)
+        last_error: Exception | None = None
+        for encoding in encodings:
+            try:
+                return pd.read_csv(upload_path, encoding=encoding)
+            except Exception as exc:
+                last_error = exc
+        raise last_error or ValueError("Unknown CSV parse failure")
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not parse CSV file: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV file. Please export it as UTF-8 CSV and try again. Details: {exc}") from exc
 
 
 def _bytes_hash(content: bytes) -> str:
