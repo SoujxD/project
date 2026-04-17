@@ -91,10 +91,11 @@ async function readCsvFile(file) {
 async function loadDefaultDataset() {
   const response = await fetch("./assets/default_dataset.csv");
   const text = await response.text();
-  localStorage.setItem(STORAGE_KEYS.csv, text);
-  localStorage.setItem(STORAGE_KEYS.name, "default_dataset.csv");
-  localStorage.setItem(STORAGE_KEYS.previewRows, JSON.stringify(parseCsvText(text).data.slice(0, 200)));
-  localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify({
+  const previewRows = parseCsvText(text).data.slice(0, 200);
+  safeSetStorage(STORAGE_KEYS.csv, text);
+  safeSetStorage(STORAGE_KEYS.name, "default_dataset.csv");
+  safeSetStorage(STORAGE_KEYS.previewRows, JSON.stringify(previewRows));
+  safeSetStorage(STORAGE_KEYS.sampling, JSON.stringify({
     sampled: false,
     sourceRows: parseCsvText(text).data.length,
     analysisRows: parseCsvText(text).data.length
@@ -153,6 +154,15 @@ function clearCachedResults() {
   localStorage.removeItem(STORAGE_KEYS.presentationCache);
 }
 
+function safeSetStorage(key, value, storage = localStorage) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function getCachedResult(key, datasetId) {
   if (!datasetId) return null;
   try {
@@ -165,7 +175,7 @@ function getCachedResult(key, datasetId) {
 
 function setCachedResult(key, datasetId, data) {
   if (!datasetId || !data) return;
-  localStorage.setItem(key, JSON.stringify({ dataset_id: datasetId, data }));
+  safeSetStorage(key, JSON.stringify({ dataset_id: datasetId, data }));
 }
 
 function setLoadingInfo(info) {
@@ -173,24 +183,30 @@ function setLoadingInfo(info) {
     sessionStorage.removeItem(STORAGE_KEYS.loading);
     return;
   }
-  sessionStorage.setItem(STORAGE_KEYS.loading, JSON.stringify(info));
+  safeSetStorage(STORAGE_KEYS.loading, JSON.stringify(info), sessionStorage);
 }
 
 function saveDataset(fileName, csvText, samplingInfo = null) {
-  if (csvText) localStorage.setItem(STORAGE_KEYS.csv, csvText);
-  else localStorage.removeItem(STORAGE_KEYS.csv);
-  localStorage.setItem(STORAGE_KEYS.name, fileName);
+  let csvStored = true;
+  if (csvText) {
+    csvStored = safeSetStorage(STORAGE_KEYS.csv, csvText);
+    if (!csvStored) localStorage.removeItem(STORAGE_KEYS.csv);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.csv);
+  }
+  safeSetStorage(STORAGE_KEYS.name, fileName);
   setStoredDatasetId(null);
   clearCachedResults();
   if (samplingInfo) {
-    localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify(samplingInfo));
+    safeSetStorage(STORAGE_KEYS.sampling, JSON.stringify(samplingInfo));
   } else {
     localStorage.removeItem(STORAGE_KEYS.sampling);
   }
+  return csvStored;
 }
 
 function saveDatasetPreview(rows) {
-  localStorage.setItem(STORAGE_KEYS.previewRows, JSON.stringify((rows || []).slice(0, 200)));
+  return safeSetStorage(STORAGE_KEYS.previewRows, JSON.stringify((rows || []).slice(0, 200)));
 }
 
 function sampleRows(rows, limit = MAX_ANALYSIS_ROWS) {
@@ -231,6 +247,10 @@ function hideLoadingOverlay() {
 function showUploadError(message) {
   hideLoadingOverlay();
   window.alert(message);
+}
+
+function showStorageQuotaError() {
+  showUploadError("This dataset is too large for browser-only storage. Please use the hosted API deployment or upload a smaller sampled CSV.");
 }
 
 function makeDatasetFormData(datasetId, extraFields = {}) {
@@ -559,7 +579,12 @@ function bindUploader() {
         saveDataset(file.name, null, samplingInfo);
         setStoredDatasetId(response?.dataset_id || null);
       } else {
-        saveDataset(file.name, csvToStore, samplingInfo);
+        const stored = saveDataset(file.name, csvToStore, samplingInfo);
+        if (!stored) {
+          input.value = "";
+          showStorageQuotaError();
+          return;
+        }
       }
       window.location.reload();
     } catch (error) {
