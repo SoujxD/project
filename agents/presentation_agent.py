@@ -405,33 +405,34 @@ class PresentationGeneratorAgent:
             "key_findings": key_findings[:6],
         }
 
-    def generate_charts(self, dataset_path: str | Path) -> dict[str, Path]:
+    def generate_charts(self, dataset_path: str | Path, chart_prefix: str | None = None) -> dict[str, Path]:
         summary = self.summarize_dataset(dataset_path)
         dataset = summary["dataset"]
         schema = summary["schema"]
         has_target = summary["target_rate"] is not None
         ylabel = self._format_metric_label(has_target)
+        prefix = f"{chart_prefix}_" if chart_prefix else ""
 
         chart_paths: dict[str, Path] = {}
         plt.style.use("seaborn-v0_8-whitegrid")
 
         missing = summary["missing_summary"]
         if len(missing) and float(missing.iloc[0]) > 0:
-            path = self.chart_dir / "missingness.png"
+            path = self.chart_dir / f"{prefix}missingness.png"
             if self._render_chart(path, lambda: self._plot_bar(missing[missing > 0], "Missingness by Column", path, horizontal=True, ylabel="Missing %")):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
                 chart_paths["missingness"] = path
 
         time_series = summary["time_series"]
         if time_series is not None and len(time_series):
-            path = self.chart_dir / "time_trend.png"
+            path = self.chart_dir / f"{prefix}time_trend.png"
             if self._render_chart(path, lambda: self._plot_line(time_series, f"Trend Across {schema['time']}", path, ylabel=ylabel)):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
                 chart_paths["time_trend"] = path
 
         primary_series = summary["primary_series"]
         if primary_series is not None and len(primary_series):
-            path = self.chart_dir / "primary_dimension.png"
+            path = self.chart_dir / f"{prefix}primary_dimension.png"
             title = f"Top Groups by {schema['primary_dimension']}"
             if self._render_chart(path, lambda: self._plot_bar(primary_series, title, path, ylabel=ylabel)):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
@@ -439,7 +440,7 @@ class PresentationGeneratorAgent:
 
         secondary_series = summary["secondary_series"]
         if secondary_series is not None and len(secondary_series):
-            path = self.chart_dir / "secondary_dimension.png"
+            path = self.chart_dir / f"{prefix}secondary_dimension.png"
             title = f"Top Groups by {schema['secondary_dimension']}"
             if self._render_chart(path, lambda: self._plot_bar(secondary_series, title, path, horizontal=True, ylabel=ylabel)):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
@@ -447,14 +448,14 @@ class PresentationGeneratorAgent:
 
         bucket_series = summary["bucket_series"]
         if bucket_series is not None and len(bucket_series):
-            path = self.chart_dir / "metric_buckets.png"
+            path = self.chart_dir / f"{prefix}metric_buckets.png"
             title = f"Performance by {summary['bucket_col']} Bucket"
             if self._render_chart(path, lambda: self._plot_line(bucket_series, title, path, ylabel=ylabel)):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
                 chart_paths["metric_buckets"] = path
         elif schema.get("primary_metric") and schema["primary_metric"] in dataset.columns:
             metric_col = schema["primary_metric"]
-            path = self.chart_dir / "metric_distribution.png"
+            path = self.chart_dir / f"{prefix}metric_distribution.png"
             if self._render_chart(path, lambda: self._plot_hist(dataset[metric_col], f"Distribution of {metric_col}", path)):
                 shutil.copy2(path, self.docs_asset_dir / path.name)
                 chart_paths["metric_distribution"] = path
@@ -627,8 +628,13 @@ class PresentationGeneratorAgent:
     def _add_chart(self, slide, chart_path: Path) -> None:
         slide.shapes.add_picture(str(chart_path), Inches(6.05), Inches(1.32), width=Inches(3.18))
 
-    def create_presentation(self, dataset_path: str | Path, output_path: str | Path) -> tuple[Path, list[SlideContent], dict[str, Path]]:
-        chart_paths = self.generate_charts(dataset_path)
+    def create_presentation(
+        self,
+        dataset_path: str | Path,
+        output_path: str | Path,
+        chart_prefix: str | None = None,
+    ) -> tuple[Path, list[SlideContent], dict[str, Path]]:
+        chart_paths = self.generate_charts(dataset_path, chart_prefix=chart_prefix)
         slides = self.build_slide_contents(dataset_path)
 
         presentation = Presentation()

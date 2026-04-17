@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import io
-import os
 import hashlib
-import uuid
+import json
+import os
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -22,8 +22,10 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = BASE_DIR / "outputs"
 API_UPLOAD_DIR = OUTPUT_DIR / "api_uploads"
 API_PRESENTATION_DIR = OUTPUT_DIR / "api_presentations"
+API_CACHE_DIR = OUTPUT_DIR / "api_cache"
 API_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 API_PRESENTATION_DIR.mkdir(parents=True, exist_ok=True)
+API_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _allowed_origins() -> list[str]:
@@ -43,12 +45,17 @@ app.add_middleware(
 )
 
 
-def _save_upload(upload: UploadFile) -> Path:
-    suffix = Path(upload.filename or "dataset.csv").suffix or ".csv"
-    file_id = uuid.uuid4().hex
+def _dataset_path(dataset_id: str) -> Path | None:
+    matches = sorted(API_UPLOAD_DIR.glob(f"{dataset_id}.*"))
+    return matches[0] if matches else None
+
+
+def _save_upload_bytes(content: bytes, filename: str, dataset_id: str | None = None) -> Path:
+    suffix = Path(filename or "dataset.csv").suffix or ".csv"
+    file_id = dataset_id or _bytes_hash(content)
     destination = API_UPLOAD_DIR / f"{file_id}{suffix}"
-    content = upload.file.read()
-    destination.write_bytes(content)
+    if not destination.exists():
+        destination.write_bytes(content)
     return destination
 
 
@@ -59,27 +66,63 @@ def _validate_csv(upload_path: Path) -> pd.DataFrame:
         raise HTTPException(status_code=400, detail=f"Could not parse CSV file: {exc}") from exc
 
 
-def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()[:16]
+def _bytes_hash(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()[:16]
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def _cache_path(dataset_id: str, key: str) -> Path:
+    return API_CACHE_DIR / f"{dataset_id}_{key}.json"
 
 
-@app.post("/api/summary")
-async def summarize_dataset(file: UploadFile = File(...)) -> dict:
-    upload_path = _save_upload(file)
-    dataset = _validate_csv(upload_path)
-    presenter = PresentationGeneratorAgent(output_dir=OUTPUT_DIR)
-    summary = presenter.summarize_dataset(upload_path)
+def _read_cache(dataset_id: str, key: str) -> dict[str, Any] | None:
+    path = _cache_path(dataset_id, key)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def _write_cache(dataset_id: str, key: str, payload: dict[str, Any]) -> None:
+    _cache_path(dataset_id, key).write_text(json.dumps(payload, indent=2, default=str))
+
+
+def _resolve_upload(dataset_id: str | None, file: UploadFile | None) -> tuple[str, Path, str]:
+    if dataset_id:
+        upload_path = _dataset_path(dataset_id)
+        if upload_path is None:
+            raise HTTPException(status_code=404, detail="Dataset session not found. Please upload the CSV again.")
+        return dataset_id, upload_path, upload_path.name
+
+    if file is None:
+        raise HTTPException(status_code=400, detail="A dataset_id or file upload is required.")
+
+    content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    resolved_dataset_id = _bytes_hash(content)
+    upload_path = _save_upload_bytes(content, file.filename or "dataset.csv", dataset_id=resolved_dataset_id)
+    return resolved_dataset_id, upload_path, file.filename or upload_path.name
+
+
+def _summary_payload(dataset_name: str, dataset: pd.DataFrame, summary: dict[str, Any], dataset_id: str) -> dict[str, Any]:
+    schema = summary["schema"]
+    summary_schema = {
+        "target": schema.get("target"),
+        "time": schema.get("time"),
+        "customer": schema.get("primary_dimension"),
+        "channel": schema.get("secondary_dimension"),
+        "engagement": schema.get("primary_metric"),
+        "friction": schema.get("secondary_metric"),
+        "primary_dimension": schema.get("primary_dimension"),
+        "secondary_dimension": schema.get("secondary_dimension"),
+        "primary_metric": schema.get("primary_metric"),
+        "secondary_metric": schema.get("secondary_metric"),
+    }
     return {
-        "dataset_name": file.filename,
+        "dataset_id": dataset_id,
+        "dataset_name": dataset_name,
         "rows": summary["rows"],
         "columns": summary["columns"],
         "analysis_rows": summary["analysis_rows"],
@@ -87,23 +130,62 @@ async def summarize_dataset(file: UploadFile = File(...)) -> dict:
         "source_format": summary["source_format"],
         "target_rate": summary["target_rate"],
         "top_time": summary["top_time"],
-        "top_customer": summary["top_customer"],
-        "top_channel": summary["top_channel"],
-        "schema": summary["schema"],
+        "top_customer": summary["top_primary_dimension_value"],
+        "top_channel": summary["top_secondary_dimension_value"],
+        "schema": summary_schema,
         "preview": dataset.head(12).fillna("").to_dict(orient="records"),
     }
 
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/api/datasets")
+async def register_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    dataset_id = _bytes_hash(content)
+    upload_path = _save_upload_bytes(content, file.filename or "dataset.csv", dataset_id=dataset_id)
+    dataset = _validate_csv(upload_path)
+    return {
+        "dataset_id": dataset_id,
+        "dataset_name": file.filename or upload_path.name,
+        "rows": int(len(dataset)),
+        "columns": int(len(dataset.columns)),
+    }
+
+
+@app.post("/api/summary")
+async def summarize_dataset(
+    dataset_id: str | None = Form(None),
+    file: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    resolved_dataset_id, upload_path, dataset_name = _resolve_upload(dataset_id, file)
+    cached = _read_cache(resolved_dataset_id, "summary")
+    if cached is not None:
+        return cached
+    dataset = _validate_csv(upload_path)
+    presenter = PresentationGeneratorAgent(output_dir=OUTPUT_DIR)
+    summary = presenter.summarize_dataset(upload_path)
+    payload = _summary_payload(dataset_name, dataset, summary, resolved_dataset_id)
+    _write_cache(resolved_dataset_id, "summary", payload)
+    return payload
+
+
 @app.post("/api/analyst")
 async def analyst_answer(
-    file: UploadFile = File(...),
+    dataset_id: str | None = Form(None),
+    file: UploadFile | None = File(None),
     question: str = Form(...),
     model: str = Form("meta-llama/llama-3.1-8b-instruct"),
     prompt_style: str = Form("structured_json"),
     rag_enabled: bool = Form(True),
     top_k: int = Form(5),
 ) -> dict:
-    upload_path = _save_upload(file)
+    resolved_dataset_id, upload_path, _ = _resolve_upload(dataset_id, file)
     _validate_csv(upload_path)
     agent = AnalystRAGAgent(dataset_path=upload_path)
     result = agent.answer_question(
@@ -114,6 +196,7 @@ async def analyst_answer(
         top_k=top_k,
     )
     return {
+        "dataset_id": resolved_dataset_id,
         "question": result.question,
         "model": result.model,
         "prompt_style": result.prompt_style,
@@ -125,14 +208,21 @@ async def analyst_answer(
 
 
 @app.post("/api/eda")
-async def eda_report(file: UploadFile = File(...)) -> dict:
-    upload_path = _save_upload(file)
+async def eda_report(
+    dataset_id: str | None = Form(None),
+    file: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    resolved_dataset_id, upload_path, dataset_name = _resolve_upload(dataset_id, file)
     _validate_csv(upload_path)
-    report_id = _file_hash(upload_path)
+    cached = _read_cache(resolved_dataset_id, "eda")
+    if cached is not None:
+        return cached
+    report_id = resolved_dataset_id
     eda_agent = EDAAgent(output_dir=OUTPUT_DIR)
     report = eda_agent.analyze_dataset(upload_path, include_charts=True, chart_prefix=report_id, cache_key=report_id)
-    return {
-        "dataset_name": file.filename,
+    payload = {
+        "dataset_id": resolved_dataset_id,
+        "dataset_name": dataset_name,
         "profile": report["profile"],
         "quality_checks": report["quality_checks"],
         "chart_manifest": [
@@ -148,17 +238,26 @@ async def eda_report(file: UploadFile = File(...)) -> dict:
         "key_findings": report["key_findings"],
         "preview": report["preview"],
     }
+    _write_cache(resolved_dataset_id, "eda", payload)
+    return payload
 
 
 @app.post("/api/presentation")
-async def generate_presentation(file: UploadFile = File(...)) -> dict:
-    upload_path = _save_upload(file)
+async def generate_presentation(
+    dataset_id: str | None = Form(None),
+    file: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    resolved_dataset_id, upload_path, _ = _resolve_upload(dataset_id, file)
     _validate_csv(upload_path)
+    cached = _read_cache(resolved_dataset_id, "presentation")
+    if cached is not None:
+        return cached
     presenter = PresentationGeneratorAgent(output_dir=OUTPUT_DIR)
-    output_filename = f"{uuid.uuid4().hex}_presentation.pptx"
+    output_filename = f"{resolved_dataset_id}_presentation.pptx"
     output_path = API_PRESENTATION_DIR / output_filename
-    ppt_path, slides, chart_paths = presenter.create_presentation(upload_path, output_path)
-    return {
+    ppt_path, slides, chart_paths = presenter.create_presentation(upload_path, output_path, chart_prefix=resolved_dataset_id)
+    payload = {
+        "dataset_id": resolved_dataset_id,
         "download_url": f"/api/downloads/{ppt_path.name}",
         "slides": [
             {
@@ -171,6 +270,8 @@ async def generate_presentation(file: UploadFile = File(...)) -> dict:
             for slide in slides
         ],
     }
+    _write_cache(resolved_dataset_id, "presentation", payload)
+    return payload
 
 
 @app.get("/api/downloads/{filename}")

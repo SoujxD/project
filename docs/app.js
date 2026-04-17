@@ -9,11 +9,15 @@ const STORAGE_KEYS = {
   csv: "ise547_dataset_csv",
   name: "ise547_dataset_name",
   sampling: "ise547_dataset_sampling",
-  loading: "ise547_dataset_loading"
+  loading: "ise547_dataset_loading",
+  datasetId: "ise547_dataset_id",
+  summaryCache: "ise547_summary_cache",
+  edaCache: "ise547_eda_cache",
+  presentationCache: "ise547_presentation_cache"
 };
 
 const API_BASE_URL = (window.APP_CONFIG?.API_BASE_URL || "").replace(/\/$/, "");
-const MAX_ANALYSIS_ROWS = 25000;
+const MAX_ANALYSIS_ROWS = 10000;
 
 function hasBackend() {
   return Boolean(API_BASE_URL);
@@ -70,6 +74,36 @@ function getLoadingInfo() {
   }
 }
 
+function getStoredDatasetId() {
+  return localStorage.getItem(STORAGE_KEYS.datasetId);
+}
+
+function setStoredDatasetId(datasetId) {
+  if (datasetId) localStorage.setItem(STORAGE_KEYS.datasetId, datasetId);
+  else localStorage.removeItem(STORAGE_KEYS.datasetId);
+}
+
+function clearCachedResults() {
+  localStorage.removeItem(STORAGE_KEYS.summaryCache);
+  localStorage.removeItem(STORAGE_KEYS.edaCache);
+  localStorage.removeItem(STORAGE_KEYS.presentationCache);
+}
+
+function getCachedResult(key, datasetId) {
+  if (!datasetId) return null;
+  try {
+    const payload = JSON.parse(localStorage.getItem(key) || "null");
+    return payload?.dataset_id === datasetId ? payload.data : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function setCachedResult(key, datasetId, data) {
+  if (!datasetId || !data) return;
+  localStorage.setItem(key, JSON.stringify({ dataset_id: datasetId, data }));
+}
+
 function setLoadingInfo(info) {
   if (!info) {
     sessionStorage.removeItem(STORAGE_KEYS.loading);
@@ -81,6 +115,8 @@ function setLoadingInfo(info) {
 function saveDataset(fileName, csvText, samplingInfo = null) {
   localStorage.setItem(STORAGE_KEYS.csv, csvText);
   localStorage.setItem(STORAGE_KEYS.name, fileName);
+  setStoredDatasetId(null);
+  clearCachedResults();
   if (samplingInfo) {
     localStorage.setItem(STORAGE_KEYS.sampling, JSON.stringify(samplingInfo));
   } else {
@@ -123,12 +159,9 @@ function hideLoadingOverlay() {
   document.getElementById("loadingOverlay")?.classList.remove("visible");
 }
 
-function makeFormData(extraFields = {}) {
-  const csv = getStoredCsv();
-  const fileName = getDatasetName();
-  const blob = new Blob([csv], { type: "text/csv" });
+function makeDatasetFormData(datasetId, extraFields = {}) {
   const formData = new FormData();
-  formData.append("file", blob, fileName);
+  if (datasetId) formData.append("dataset_id", datasetId);
   Object.entries(extraFields).forEach(([key, value]) => formData.append(key, String(value)));
   return formData;
 }
@@ -140,6 +173,24 @@ async function fetchApi(path, options = {}) {
     throw new Error(detail || `Request failed: ${response.status}`);
   }
   return response.json();
+}
+
+async function ensureBackendDataset() {
+  if (!hasBackend() || !getStoredCsv()) return null;
+  const existing = getStoredDatasetId();
+  if (existing) return existing;
+
+  const csv = getStoredCsv();
+  const fileName = getDatasetName();
+  const blob = new Blob([csv], { type: "text/csv" });
+  const formData = new FormData();
+  formData.append("file", blob, fileName);
+  const response = await fetchApi("/api/datasets", { method: "POST", body: formData });
+  if (response?.dataset_id) {
+    setStoredDatasetId(response.dataset_id);
+    return response.dataset_id;
+  }
+  return null;
 }
 
 function isNumericColumn(rows, column) {
@@ -346,7 +397,15 @@ function buildEdaFallback(rows) {
 async function getSummary(rows) {
   if (hasBackend() && getStoredCsv()) {
     try {
-      return await fetchApi("/api/summary", { method: "POST", body: makeFormData() });
+      const datasetId = await ensureBackendDataset();
+      const cached = getCachedResult(STORAGE_KEYS.summaryCache, datasetId);
+      if (cached) return cached;
+      const response = await fetchApi("/api/summary", {
+        method: "POST",
+        body: makeDatasetFormData(datasetId)
+      });
+      setCachedResult(STORAGE_KEYS.summaryCache, datasetId, response);
+      return response;
     } catch (error) {
       console.warn("Backend summary failed, falling back to browser mode.", error);
     }
@@ -464,6 +523,8 @@ function renderUploadCard(summary) {
     localStorage.removeItem(STORAGE_KEYS.csv);
     localStorage.removeItem(STORAGE_KEYS.name);
     localStorage.removeItem(STORAGE_KEYS.sampling);
+    localStorage.removeItem(STORAGE_KEYS.datasetId);
+    clearCachedResults();
     window.location.reload();
   });
 }
@@ -705,7 +766,12 @@ async function renderAnalystPage(rows) {
         <button id="runAnalystButton" type="button">Run analysis</button>
       </div>
     </div>
-    <div id="analystResults" style="margin-top:18px; display:grid; gap:16px;"></div>
+    <div id="analystResults" style="margin-top:18px; display:grid; gap:16px;">
+      <div class="card fade-in">
+        <div class="section-title">Ready to analyze</div>
+        <p class="muted">Choose a question and run the analyst when you are ready. This avoids an automatic backend call every time the page opens.</p>
+      </div>
+    </div>
   `;
 
   document.querySelectorAll(".sample-question").forEach((btn) =>
@@ -730,9 +796,10 @@ async function renderAnalystPage(rows) {
     let responseData;
     if (hasBackend() && getStoredCsv()) {
       try {
+        const datasetId = await ensureBackendDataset();
         responseData = await fetchApi("/api/analyst", {
           method: "POST",
-          body: makeFormData({
+          body: makeDatasetFormData(datasetId, {
             question,
             model,
             prompt_style: promptStyle,
@@ -759,14 +826,21 @@ async function renderAnalystPage(rows) {
   }
 
   document.getElementById("runAnalystButton").addEventListener("click", run);
-  run();
 }
 
 async function renderEdaPage(rows) {
   let report;
   if (hasBackend() && getStoredCsv()) {
     try {
-      report = await fetchApi("/api/eda", { method: "POST", body: makeFormData() });
+      const datasetId = await ensureBackendDataset();
+      report = getCachedResult(STORAGE_KEYS.edaCache, datasetId);
+      if (!report) {
+        report = await fetchApi("/api/eda", {
+          method: "POST",
+          body: makeDatasetFormData(datasetId)
+        });
+        setCachedResult(STORAGE_KEYS.edaCache, datasetId, report);
+      }
       report.chart_manifest = (report.chart_manifest || []).map((chart) => ({
         ...chart,
         chart_url: chart.chart_url ? `${API_BASE_URL}${chart.chart_url}` : null
@@ -939,10 +1013,15 @@ async function renderPresentationPage(rows) {
 
   if (hasBackend() && getStoredCsv()) {
     try {
-      const response = await fetchApi("/api/presentation", {
-        method: "POST",
-        body: makeFormData()
-      });
+      const datasetId = await ensureBackendDataset();
+      let response = getCachedResult(STORAGE_KEYS.presentationCache, datasetId);
+      if (!response) {
+        response = await fetchApi("/api/presentation", {
+          method: "POST",
+          body: makeDatasetFormData(datasetId)
+        });
+        setCachedResult(STORAGE_KEYS.presentationCache, datasetId, response);
+      }
       downloadUrl = `${API_BASE_URL}${response.download_url}`;
       slides = response.slides.map((slide) => ({
         ...slide,
