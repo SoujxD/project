@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from utils.dataset_adapter import DatasetAdapterResult, load_analysis_dataset
+from utils.dataset_adapter import DatasetAdapterResult, load_analysis_dataset, read_dataset
 
 
 @dataclass(slots=True)
@@ -68,25 +68,41 @@ class EDAAgent:
             unique_values = set(cleaned.unique().tolist())
             if unique_values and unique_values.issubset({0, 1}):
                 return pd.to_numeric(series, errors="coerce").fillna(0).astype(int)
-        lowered = series.astype(str).str.strip().str.lower()
+        non_null = series.dropna()
+        lowered = non_null.astype("string").str.strip().str.lower()
         mapping = {
+            "1": 1, "0": 0,
             "true": 1, "false": 0, "yes": 1, "no": 0,
             "y": 1, "n": 0, "purchase": 1, "no_purchase": 0,
             "purchased": 1, "not_purchased": 0, "converted": 1, "not_converted": 0,
         }
         unique_values = set(lowered.dropna().unique().tolist())
         if unique_values and unique_values.issubset(set(mapping)):
-            return lowered.map(mapping).fillna(0).astype(int)
+            normalized = series.astype("string").str.strip().str.lower()
+            return normalized.map(mapping).fillna(0).astype(int)
+        return None
+
+    def _resolve_target_column(self, dataset: pd.DataFrame) -> str | None:
+        keyword_matches: list[str] = []
+        normalized_map = {column: self._normalized(column) for column in dataset.columns}
+        for keyword in ["purchased", "converted", "conversion", "purchase_count", "purchase", "order"]:
+            probe = self._normalized(keyword)
+            keyword_matches.extend(
+                column
+                for column, normalized in normalized_map.items()
+                if probe in normalized and column not in keyword_matches
+            )
+        for column in keyword_matches:
+            if self._target_series(dataset[column]) is not None:
+                return column
+        for column in dataset.columns:
+            if self._target_series(dataset[column]) is not None:
+                return column
         return None
 
     def infer_schema(self, dataset: pd.DataFrame) -> dict[str, str | None]:
         """Infer generalized ecommerce roles from the analysis dataset."""
-        target = self._find_column(dataset, ["revenue", "purchase_count", "purchased", "converted", "conversion", "order"])
-        if target is None:
-            for column in dataset.columns:
-                if self._target_series(dataset[column]) is not None:
-                    target = column
-                    break
+        target = self._resolve_target_column(dataset)
 
         time = self._find_column(dataset, ["event_month", "month", "date", "week", "day", "period", "session_start"])
         customer = self._find_column(
@@ -285,11 +301,13 @@ class EDAAgent:
 
     def _handoff_summary(
         self,
+        dataset: pd.DataFrame,
         profile: dict[str, Any],
         quality_report: dict[str, Any],
         suggested_questions: list[str],
     ) -> dict[str, Any]:
         schema = profile["schema"]
+        key_findings = self._key_findings(dataset, profile, schema, quality_report)
         return {
             "dataset_type": profile["source_format"],
             "analysis_grain": profile["analysis_grain"],
@@ -300,7 +318,7 @@ class EDAAgent:
             "engagement_metric": schema.get("engagement"),
             "friction_metric": schema.get("friction"),
             "quality_warnings": quality_report["warnings"][:5],
-            "top_patterns": self._key_findings(pd.DataFrame(), profile, schema, quality_report)[:4],
+            "top_patterns": key_findings[:4],
             "recommended_questions": suggested_questions[:5],
         }
 
@@ -426,6 +444,12 @@ class EDAAgent:
         fig.savefig(path, dpi=self.CHART_DPI)
         plt.close(fig)
 
+    def _render_chart(self, path: Path, render: Any) -> bool:
+        if path.exists():
+            path.unlink()
+        render()
+        return path.exists()
+
     def _chart_manifest(
         self,
         dataset: pd.DataFrame,
@@ -444,41 +468,44 @@ class EDAAgent:
         ).sort_values(ascending=False)
         if not missing.empty:
             path = self.chart_dir / f"{chart_prefix}_missingness.png"
-            self._plot_bar(missing.head(10), "Missing Values by Column", path, horizontal=True, ylabel="Missing %")
-            charts.append(EDAChart("missingness", "Missing values by column", "Shows the columns with the highest percentage of missing values.", path))
+            if self._render_chart(path, lambda: self._plot_bar(missing.head(10), "Missing Values by Column", path, horizontal=True, ylabel="Missing %")):
+                charts.append(EDAChart("missingness", "Missing values by column", "Shows the columns with the highest percentage of missing values.", path))
 
         time_series = self._group_metric(dataset, schema.get("time"), target_metric)
         if time_series is not None and len(time_series) and len(charts) < max_charts:
             path = self.chart_dir / f"{chart_prefix}_time_area.png"
-            self._plot_area(
-                time_series.head(12),
-                "Trend Across Time",
+            if self._render_chart(
                 path,
-                ylabel="Outcome Rate" if target_metric is not None else "Volume",
-            )
-            charts.append(
-                EDAChart(
-                    "time_area",
-                    "Trend across time",
-                    "Uses a light area chart to show how the main business signal changes across the detected time field.",
+                lambda: self._plot_area(
+                    time_series.head(12),
+                    "Trend Across Time",
                     path,
+                    ylabel="Outcome Rate" if target_metric is not None else "Volume",
                 )
-            )
+            ):
+                charts.append(
+                    EDAChart(
+                        "time_area",
+                        "Trend across time",
+                        "Uses a light area chart to show how the main business signal changes across the detected time field.",
+                        path,
+                    )
+                )
 
         mix_dimension = schema.get("channel") or schema.get("customer") or schema.get("product")
         if mix_dimension and mix_dimension in dataset.columns and len(charts) < max_charts:
             mix_series = dataset[mix_dimension].astype(str).value_counts().head(5)
             if len(mix_series):
                 path = self.chart_dir / f"{chart_prefix}_mix_doughnut.png"
-                self._plot_doughnut(mix_series, f"Share of Top {mix_dimension} Groups", path)
-                charts.append(
-                    EDAChart(
-                        "mix_doughnut",
-                        f"Share of top {mix_dimension} groups",
-                        "Summarizes the dominant business segments with a compact doughnut view.",
-                        path,
+                if self._render_chart(path, lambda: self._plot_doughnut(mix_series, f"Share of Top {mix_dimension} Groups", path)):
+                    charts.append(
+                        EDAChart(
+                            "mix_doughnut",
+                            f"Share of top {mix_dimension} groups",
+                            "Summarizes the dominant business segments with a compact doughnut view.",
+                            path,
+                        )
                     )
-                )
 
         primary_numeric = schema.get("engagement")
         if not primary_numeric and profile["numeric_columns"]:
@@ -492,28 +519,31 @@ class EDAAgent:
             and len(charts) < max_charts
         ):
             path = self.chart_dir / f"{chart_prefix}_engagement_scatter.png"
-            self._plot_scatter(dataset, primary_numeric, schema["target"], f"{primary_numeric} vs {schema['target']}", path)
-            charts.append(
-                EDAChart(
-                    "engagement_scatter",
-                    f"{primary_numeric} vs {schema['target']}",
-                    "Shows how a strong numeric behavior signal relates to the detected outcome variable.",
-                    path,
+            if self._render_chart(
+                path,
+                lambda: self._plot_scatter(dataset, primary_numeric, schema["target"], f"{primary_numeric} vs {schema['target']}", path),
+            ):
+                charts.append(
+                    EDAChart(
+                        "engagement_scatter",
+                        f"{primary_numeric} vs {schema['target']}",
+                        "Shows how a strong numeric behavior signal relates to the detected outcome variable.",
+                        path,
+                    )
                 )
-            )
         elif len(numeric_candidates.columns) >= 2 and len(charts) < max_charts:
             corr = numeric_candidates.corr(numeric_only=True).round(2)
             if corr.shape[0] > 1:
                 path = self.chart_dir / f"{chart_prefix}_correlation_heatmap.png"
-                self._plot_heatmap(corr.iloc[:6, :6], "Numeric Correlation Heatmap", path)
-                charts.append(
-                    EDAChart(
-                        "correlation_heatmap",
-                        "Numeric correlation heatmap",
-                        "Highlights the strongest numeric relationships in the normalized analysis view.",
-                        path,
+                if self._render_chart(path, lambda: self._plot_heatmap(corr.iloc[:6, :6], "Numeric Correlation Heatmap", path)):
+                    charts.append(
+                        EDAChart(
+                            "correlation_heatmap",
+                            "Numeric correlation heatmap",
+                            "Highlights the strongest numeric relationships in the normalized analysis view.",
+                            path,
+                        )
                     )
-                )
 
         if len(charts) < 3:
             distribution_col = None
@@ -523,15 +553,18 @@ class EDAAgent:
                     break
             if distribution_col:
                 path = self.chart_dir / f"{chart_prefix}_distribution.png"
-                self._plot_hist(pd.to_numeric(dataset[distribution_col], errors="coerce"), f"Distribution of {distribution_col}", path)
-                charts.append(
-                    EDAChart(
-                        "distribution",
-                        f"Distribution of {distribution_col}",
-                        "Shows how the most informative detected numeric field is distributed across the dataset.",
-                        path,
+                if self._render_chart(
+                    path,
+                    lambda: self._plot_hist(pd.to_numeric(dataset[distribution_col], errors="coerce"), f"Distribution of {distribution_col}", path),
+                ):
+                    charts.append(
+                        EDAChart(
+                            "distribution",
+                            f"Distribution of {distribution_col}",
+                            "Shows how the most informative detected numeric field is distributed across the dataset.",
+                            path,
+                        )
                     )
-                )
 
         manifest: list[dict[str, Any]] = []
         for chart in charts[:max_charts]:
@@ -583,7 +616,7 @@ class EDAAgent:
             if cached is not None:
                 return cached
         adapted = load_analysis_dataset(dataset_path)
-        raw_dataset = pd.read_csv(dataset_path)
+        raw_dataset = read_dataset(dataset_path)
         analysis_dataset = adapted.dataframe
         schema = self.infer_schema(analysis_dataset)
         profile = self._profile(adapted, schema)
@@ -592,19 +625,7 @@ class EDAAgent:
         prefix = chart_prefix or uuid.uuid4().hex[:12]
         chart_manifest = self._chart_manifest(analysis_dataset, profile, quality_report, prefix) if include_charts else []
         key_findings = self._key_findings(analysis_dataset, profile, schema, quality_report)
-        handoff_summary = {
-            "dataset_type": profile["source_format"],
-            "analysis_grain": profile["analysis_grain"],
-            "target_column": schema.get("target"),
-            "time_column": schema.get("time"),
-            "customer_dimensions": [value for value in [schema.get("customer")] if value],
-            "channel_dimensions": [value for value in [schema.get("channel"), schema.get("product")] if value],
-            "engagement_metric": schema.get("engagement"),
-            "friction_metric": schema.get("friction"),
-            "quality_warnings": quality_report["warnings"][:5],
-            "top_patterns": key_findings[:4],
-            "recommended_questions": suggested_questions[:5],
-        }
+        handoff_summary = self._handoff_summary(analysis_dataset, profile, quality_report, suggested_questions)
         retrieval_chunks = self._retrieval_chunks(profile, quality_report, suggested_questions, chart_manifest)
         report = {
             "profile": profile,

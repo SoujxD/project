@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -130,6 +131,30 @@ def adapt_dataset(dataset: pd.DataFrame) -> DatasetAdapterResult:
 
 
 def load_analysis_dataset(dataset_path: str | Path) -> DatasetAdapterResult:
-    """Read a CSV and convert it into an analysis-friendly dataframe when needed."""
-    dataset = pd.read_csv(dataset_path)
+    """Read a supported dataset file and convert it into an analysis-friendly dataframe when needed."""
+    dataset = read_dataset(dataset_path)
     return adapt_dataset(dataset)
+
+
+def read_dataset(dataset_path: str | Path) -> pd.DataFrame:
+    """Read a tabular dataset from a small set of common analytics formats."""
+    path = Path(dataset_path)
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    if suffix == ".tsv":
+        return pd.read_csv(path, sep="\t")
+    if suffix in {".xlsx", ".xls"}:
+        return pd.read_excel(path)
+    if suffix == ".parquet":
+        return pd.read_parquet(path)
+    if suffix == ".json":
+        try:
+            return pd.read_json(path)
+        except ValueError:
+            with path.open() as handle:
+                records = [json.loads(line) for line in handle if line.strip()]
+            return pd.DataFrame(records)
+    if suffix == ".jsonl":
+        return pd.read_json(path, lines=True)
+    raise ValueError(f"Unsupported dataset format: {suffix or 'no extension'}")
