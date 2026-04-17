@@ -5,6 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Presentation | Ecommerce Analytics</title>
     <link rel="stylesheet" href="./styles.css?v=20260416b" />
+    <script>
+      (function () {
+        const LEGACY_KEY = "ise547_dataset_csv";
+        try {
+          localStorage.removeItem(LEGACY_KEY);
+        } catch (_) {
+          // Ignore storage cleanup failures.
+        }
+        const originalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+          if (key === LEGACY_KEY) {
+            try {
+              this.removeItem(LEGACY_KEY);
+            } catch (_) {
+              // Ignore cleanup failures.
+            }
+            if (typeof value === "string" && value.length > 500000) {
+              return;
+            }
+          }
+          return originalSetItem.call(this, key, value);
+        };
+      })();
+    </script>
     <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script defer src="./config.js?v=20260416b"></script>
     <script defer src="./app.js?v=20260416b"></script>
